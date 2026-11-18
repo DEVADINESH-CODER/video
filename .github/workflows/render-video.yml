@@ -1,0 +1,65 @@
+name: Render video
+
+on:
+  workflow_dispatch:
+    inputs:
+      composition:
+        description: Composition ID to render
+        required: false
+        default: Episode1
+        type: string
+  push:
+    branches:
+      - main
+    paths:
+      - "src/**"
+      - "public/**"
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    name: Render ${{ github.event.inputs.composition || 'Episode1' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Ensure Chromium
+        run: npx remotion browser ensure
+
+      - name: Render keyframe stills
+        run: npm run stills:ep1
+
+      - name: Render video
+        run: npx remotion render ${{ github.event.inputs.composition || 'Episode1' }} out/${{ github.event.inputs.composition || 'Episode1' }}.mp4 --concurrency=100%
+
+      - name: Upload MP4
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rendered-video
+          path: out/*.mp4
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload keyframe stills
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: keyframe-stills
+          path: out/stills/
+          if-no-files-found: warn
+          retention-days: 14
