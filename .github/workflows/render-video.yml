@@ -18,11 +18,14 @@ on:
 permissions:
   contents: read
 
+env:
+  COMPOSITION: ${{ github.event.inputs.composition || 'Episode1' }}
+
 jobs:
   render:
     name: Render ${{ github.event.inputs.composition || 'Episode1' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -34,17 +37,39 @@ jobs:
           node-version: 20
           cache: npm
 
+      - name: Read Remotion version
+        id: remotion
+        run: |
+          VERSION=$(node -p "require('./package-lock.json').packages['node_modules/remotion'].version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Install dependencies
         run: npm ci
+
+      # Remotion caches the Chrome Headless Shell in node_modules/.remotion, so
+      # this has to run after `npm ci`, which recreates node_modules.
+      - name: Cache Remotion browser
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.remotion
+          key: remotion-browser-${{ runner.os }}-${{ steps.remotion.outputs.version }}
+          restore-keys: |
+            remotion-browser-${{ runner.os }}-
 
       - name: Ensure Chromium
         run: npx remotion browser ensure
 
-      - name: Render keyframe stills
-        run: npm run stills:ep1
-
       - name: Render video
-        run: npx remotion render ${{ github.event.inputs.composition || 'Episode1' }} out/${{ github.event.inputs.composition || 'Episode1' }}.mp4 --concurrency=100%
+        run: npx remotion render "$COMPOSITION" "out/$COMPOSITION.mp4" --concurrency=100%
+
+      # Frames in the rendered MP4 map 1:1 to Remotion frames, so the stills are
+      # pulled in a single fast ffmpeg pass instead of booting Chromium 7 times.
+      - name: Extract keyframe stills
+        run: |
+          mkdir -p out/stills
+          ffmpeg -hide_banner -loglevel error -y -i "out/$COMPOSITION.mp4" \
+            -vf "select='eq(n,60)+eq(n,220)+eq(n,480)+eq(n,780)+eq(n,1020)+eq(n,1240)+eq(n,1550)'" \
+            -fps_mode vfr "out/stills/frame-%02d.png"
 
       - name: Upload MP4
         if: always()
