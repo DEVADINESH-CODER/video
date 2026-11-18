@@ -1,9 +1,12 @@
 /**
- * Shared design tokens for Episode 01.
+ * Shared design tokens for every episode.
  *
  * Palette source: the story's own visual language — a cold, technical world
  * (charcoal + electric cyan), the crimson of public humiliation, the green of
  * the scoreboard, and the warm amber of the one relationship that stayed.
+ *
+ * Episode-specific things (id, runtime, scene windows, voiceover) live in
+ * episodes/<slug>/config.ts so episodes stay independent of each other.
  */
 
 export const COLORS = {
@@ -32,15 +35,5 @@ export const FONT_DISPLAY =
 export const FONT_MONO =
   "'JetBrains Mono','SFMono-Regular',Menlo,'DejaVu Sans Mono',monospace";
 
-/** Episode timing — 30 fps, 58 seconds, vertical. */
+/** Every episode is vertical and shot at 30 fps. */
 export const FPS = 30;
-export const EPISODE_FRAMES = 1740;
-export const SCENES = [
-  { from: 0, duration: 120, name: "The doorway", accent: COLORS.amber },
-  { from: 120, duration: 210, name: "The corridor", accent: COLORS.cyan },
-  { from: 330, duration: 330, name: "The train", accent: COLORS.cyan },
-  { from: 660, duration: 240, name: "The gate", accent: COLORS.crimson },
-  { from: 900, duration: 240, name: "Worthless", accent: COLORS.crimson },
-  { from: 1140, duration: 210, name: "The turn", accent: COLORS.cyan },
-  { from: 1350, duration: 390, name: "The proof", accent: COLORS.cyan },
-] as const;

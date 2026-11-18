@@ -5,9 +5,9 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
-import { COLORS, FONT_DISPLAY, FONT_MONO } from "../theme";
-import { alpha } from "../components/Stage";
-import { ExplorerAvatar } from "../components/ExplorerAvatar";
+import { COLORS, FONT_DISPLAY, FONT_MONO } from "../../../src/theme";
+import { alpha } from "../../../src/components/Stage";
+import { ExplorerAvatar } from "../../../src/components/ExplorerAvatar";
 
 /**
  * Scene 7 · 1350 – 1740

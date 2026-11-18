@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { AbsoluteFill, useCurrentFrame } from "remotion";
-import { COLORS, EPISODE_FRAMES, FONT_MONO, SCENES } from "../theme";
+import type { SceneMarker } from "../episode";
+import { COLORS, FONT_MONO } from "../theme";
 
 export const alpha = (hex: string, a: number) => {
   const v = hex.replace("#", "");
@@ -91,14 +92,26 @@ export const Stage: React.FC<StageProps> = ({
   );
 };
 
+type ChromeProps = {
+  /** Scene windows of the episode being rendered. */
+  scenes: readonly SceneMarker[];
+  durationInFrames: number;
+  /** Corner mark, e.g. "EP.02". */
+  label?: string;
+};
+
 /** Episode-level chrome: grain, vignette, progress, episode mark. */
-export const Chrome: React.FC = () => {
+export const Chrome: React.FC<ChromeProps> = ({
+  scenes,
+  durationInFrames,
+  label = "EP.01",
+}) => {
   const frame = useCurrentFrame();
-  const progress = Math.min(1, frame / (EPISODE_FRAMES - 1));
+  const progress = Math.min(1, frame / Math.max(1, durationInFrames - 1));
   const active =
-    SCENES.find(
+    scenes.find(
       (scene) => frame >= scene.from && frame < scene.from + scene.duration,
-    ) ?? SCENES[SCENES.length - 1];
+    ) ?? scenes[scenes.length - 1];
   const accent = active.accent;
 
   return (
@@ -156,7 +169,7 @@ export const Chrome: React.FC = () => {
             boxShadow: `0 0 14px ${alpha(accent, 0.9)}`,
           }}
         />
-        EP.01
+        {label}
       </div>
       <div
         style={{

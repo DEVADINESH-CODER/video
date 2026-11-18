@@ -1,0 +1,66 @@
+{
+  "episode": "ep01",
+  "title": "Worthless",
+  "compositionId": "Episode1",
+  "voiceReference": "assets/my_voice_ref.wav",
+  "output": "public/audio/ep01_voice.wav",
+  "pauseMs": 400,
+  "scenes": [
+    {
+      "scene": 1,
+      "fromFrame": 0,
+      "durationInFrames": 120,
+      "narration": "Twenty-one days. One uniform, and the whole world outside.",
+      "exaggeration": 0.45,
+      "cfg_weight": 0.35
+    },
+    {
+      "scene": 2,
+      "fromFrame": 120,
+      "durationInFrames": 210,
+      "narration": "My mother taught here. Nobody was teaching this.",
+      "exaggeration": 0.55,
+      "cfg_weight": 0.38
+    },
+    {
+      "scene": 3,
+      "fromFrame": 330,
+      "durationInFrames": 330,
+      "narration": "Trains, strangers, their joy and their grief. Real life does not live inside a classroom.",
+      "exaggeration": 0.65,
+      "cfg_weight": 0.4
+    },
+    {
+      "scene": 4,
+      "fromFrame": 660,
+      "durationInFrames": 240,
+      "narration": "On day twenty-one, they were waiting at my gate.",
+      "exaggeration": 0.8,
+      "cfg_weight": 0.42
+    },
+    {
+      "scene": 5,
+      "fromFrame": 900,
+      "durationInFrames": 240,
+      "narration": "Worthless. Unfit to study. They said it out loud, in front of my parents.",
+      "exaggeration": 0.95,
+      "cfg_weight": 0.45
+    },
+    {
+      "scene": 6,
+      "fromFrame": 1140,
+      "durationInFrames": 210,
+      "narration": "So I stopped memorising, and started understanding.",
+      "exaggeration": 0.6,
+      "cfg_weight": 0.4
+    },
+    {
+      "scene": 7,
+      "fromFrame": 1350,
+      "durationInFrames": 390,
+      "narration": "Seventy-one government exams. Four client projects. One registered company. And I kept walking.",
+      "exaggeration": 0.5,
+      "cfg_weight": 0.34
+    }
+  ]
+}

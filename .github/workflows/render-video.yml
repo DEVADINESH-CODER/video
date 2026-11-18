@@ -3,6 +3,11 @@ name: Render video
 on:
   workflow_dispatch:
     inputs:
+      episode:
+        description: "Episode folder under episodes/ (e.g. ep01)"
+        required: true
+        default: "ep01"
+        type: string
       mode:
         description: "stills_only (fast scene check) or full_video"
         required: true
@@ -11,34 +16,56 @@ on:
         options:
           - stills_only
           - full_video
-      composition:
-        description: Composition ID to render
+      generate_voice:
+        description: "Clone the voice with Chatterbox before rendering (slow on CPU runners; prefer voice-clone.yml)"
         required: false
-        default: Episode1
-        type: string
+        default: false
+        type: boolean
   push:
     branches:
       - main
     paths:
       - "src/**"
+      - "episodes/**"
       - "public/**"
+      - "scripts/generate_voice.py"
+      - ".github/workflows/render-video.yml"
 
 permissions:
   contents: read
 
 env:
-  COMPOSITION: ${{ github.event.inputs.composition || 'Episode1' }}
+  EPISODE: ${{ github.event.inputs.episode || 'ep01' }}
   MODE: ${{ github.event.inputs.mode || 'full_video' }}
+  GENERATE_VOICE: ${{ github.event.inputs.generate_voice || 'false' }}
 
 jobs:
   render:
-    name: ${{ github.event.inputs.mode || 'full_video' }} · ${{ github.event.inputs.composition || 'Episode1' }}
+    name: ${{ github.event.inputs.episode || 'ep01' }} · ${{ github.event.inputs.mode || 'full_video' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 90
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # ep01 → Episode1, and nothing is hard-coded to a single episode: the
+      # composition id is derived from the folder, and the render is written to
+      # out/<episode>.mp4 so episodes can never overwrite each other.
+      - name: Resolve episode
+        id: ep
+        run: |
+          set -euo pipefail
+          if [[ ! "$EPISODE" =~ ^ep[0-9]+$ ]]; then
+            echo "::error::episode must look like ep01 (got '$EPISODE')"
+            exit 1
+          fi
+          if [[ ! -f "episodes/$EPISODE/config.ts" ]]; then
+            echo "::error::episodes/$EPISODE/config.ts does not exist"
+            exit 1
+          fi
+          echo "composition=Episode$((10#${EPISODE#ep}))" >> "$GITHUB_OUTPUT"
+          echo "audio=audio/${EPISODE}_voice.wav" >> "$GITHUB_OUTPUT"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -68,18 +95,21 @@ jobs:
       - name: Ensure Chromium
         run: npx remotion browser ensure
 
-      # Stills-first: one still per scene, before any MP4 encode is paid for.
-      - name: Render scene preview stills
-        if: env.MODE == 'stills_only'
-        run: |
-          mkdir -p out/stills
-          for frame in 60 220 480 700 840 1020 1550; do
-            npx remotion still "$COMPOSITION" "out/stills/frame-$frame.png" --frame="$frame"
-          done
+      # Optional: clone the voice on the runner. CPU inference is slow, so the
+      # dedicated voice-clone.yml workflow (or notebooks/clone_voice.ipynb on a
+      # free Colab T4) is the better default.
+      - name: Set up Python
+        if: env.GENERATE_VOICE == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-      - name: Render video
-        if: env.MODE == 'full_video'
-        run: npx remotion render "$COMPOSITION" "out/$COMPOSITION.mp4" --concurrency=100%
+      - name: Clone voice with Chatterbox
+        if: env.GENERATE_VOICE == 'true'
+        run: |
+          python -m pip install --upgrade pip
+          pip install chatterbox-tts pydub
+          python scripts/generate_voice.py --episode "$EPISODE"
 
       # ubuntu-latest does not ship ffmpeg, and the binary bundled with Remotion
       # is built with --disable-filters (so `select` is missing). Install the
@@ -91,22 +121,49 @@ jobs:
           sudo apt-get install -y ffmpeg
           ffmpeg -version | head -n 1
 
+      # Stills-first: one still per scene, before any MP4 encode is paid for.
+      - name: Render scene preview stills
+        if: env.MODE == 'stills_only'
+        run: |
+          mkdir -p "out/stills/$EPISODE"
+          for frame in 60 220 480 700 840 1020 1550; do
+            npx remotion still "${{ steps.ep.outputs.composition }}" \
+              "out/stills/$EPISODE/frame-$frame.png" --frame="$frame"
+          done
+
+      - name: Render video
+        if: env.MODE == 'full_video'
+        run: |
+          npx remotion render "${{ steps.ep.outputs.composition }}" \
+            "out/$EPISODE.mp4" --concurrency=100%
+
       # Pull the same frames out of the finished MP4 in one pass, so a full
       # render also ships inspectable stills without booting Chromium again.
       - name: Extract keyframe stills
         if: env.MODE == 'full_video'
         run: |
-          mkdir -p out/stills
-          ffmpeg -hide_banner -loglevel error -y -i "out/$COMPOSITION.mp4" \
+          mkdir -p "out/stills/$EPISODE"
+          ffmpeg -hide_banner -loglevel error -y -i "out/$EPISODE.mp4" \
             -vf "select='eq(n,60)+eq(n,220)+eq(n,480)+eq(n,700)+eq(n,840)+eq(n,1020)+eq(n,1550)'" \
-            -fps_mode vfr "out/stills/frame-%02d.png"
+            -fps_mode vfr "out/stills/$EPISODE/frame-%02d.png"
 
       - name: Upload scene preview images
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: scene-preview-images
-          path: out/stills/
+          name: scene-preview-images-${{ env.EPISODE }}
+          path: out/stills/${{ env.EPISODE }}/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload voiceover
+        if: always() && env.GENERATE_VOICE == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: voiceover-${{ env.EPISODE }}
+          path: |
+            public/audio/${{ env.EPISODE }}_voice.wav
+            public/audio/${{ env.EPISODE }}_timings.json
           if-no-files-found: warn
           retention-days: 14
 
@@ -114,7 +171,7 @@ jobs:
         if: always() && env.MODE == 'full_video'
         uses: actions/upload-artifact@v4
         with:
-          name: rendered-video
-          path: out/*.mp4
+          name: rendered-video-${{ env.EPISODE }}
+          path: out/${{ env.EPISODE }}.mp4
           if-no-files-found: warn
           retention-days: 14

@@ -3,9 +3,9 @@ import {
   interpolate,
   useCurrentFrame,
 } from "remotion";
-import { COLORS, FONT_MONO } from "../theme";
-import { alpha } from "../components/Stage";
-import { ExplorerAvatar } from "../components/ExplorerAvatar";
+import { COLORS, FONT_MONO } from "../../../src/theme";
+import { alpha } from "../../../src/components/Stage";
+import { ExplorerAvatar } from "../../../src/components/ExplorerAvatar";
 
 /**
  * Scene 3 · 330 – 660

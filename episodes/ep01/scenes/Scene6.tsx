@@ -4,9 +4,9 @@ import {
   interpolate,
   useCurrentFrame,
 } from "remotion";
-import { COLORS } from "../theme";
-import { alpha } from "../components/Stage";
-import { ExplorerAvatar } from "../components/ExplorerAvatar";
+import { COLORS } from "../../../src/theme";
+import { alpha } from "../../../src/components/Stage";
+import { ExplorerAvatar } from "../../../src/components/ExplorerAvatar";
 
 /**
  * Scene 6 · 1140 – 1350
