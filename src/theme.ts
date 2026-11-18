@@ -37,3 +37,15 @@ export const FONT_MONO =
 
 /** Every episode is vertical and shot at 30 fps. */
 export const FPS = 30;
+
+/**
+ * One damped spring for every camera move and entrance.
+ *
+ * High stiffness with low damping overshoots and shimmers on vertical lines;
+ * this setting settles cleanly in roughly half a second and never rings.
+ */
+export const SPRING_CAMERA = {
+  damping: 22,
+  stiffness: 110,
+  mass: 1,
+} as const;

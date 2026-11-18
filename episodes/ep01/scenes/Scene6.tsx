@@ -92,11 +92,11 @@ export const Scene6: React.FC = () => {
       <div
         style={{
           position: "absolute",
-          top: 430,
-          right: 60,
-          width: 260,
-          height: 1080,
-          background: `linear-gradient(180deg, transparent 0%, ${alpha(COLORS.cyan, 0.32)} 40%, ${alpha(COLORS.cyan, 0.08)} 100%)`,
+          top: 260,
+          right: 20,
+          width: 420,
+          height: 1400,
+          background: `linear-gradient(180deg, transparent 0%, ${alpha(COLORS.cyan, 0.42)} 38%, ${alpha(COLORS.cyan, 0.12)} 100%)`,
           filter: "none",
           opacity: rim,
           transform: "skewX(-6deg)",
@@ -108,9 +108,9 @@ export const Scene6: React.FC = () => {
         style={{
           position: "absolute",
           left: "50%",
-          bottom: 110,
-          width: 900,
-          height: 950,
+          bottom: -40,
+          width: 1420,
+          height: 1499,
           transform: `translateX(-50%) scaleX(${1 - turn * 0.16})`,
           opacity: profileFade,
         }}
@@ -123,15 +123,28 @@ export const Scene6: React.FC = () => {
         style={{
           position: "absolute",
           left: "50%",
-          bottom: 100,
-          width: 920,
-          height: 971,
+          bottom: -40,
+          width: 1460,
+          height: 1541,
           transform: `translateX(-50%) translateY(${(1 - turn) * 22}px) scale(${0.97 + turn * 0.03})`,
           opacity: frontFade,
         }}
       >
         <ExplorerAvatar cameraAngle="front_centered" outfit="school_uniform" expression="determined" rim={COLORS.cyan} />
       </div>
+
+      <div
+        style={{
+          position: "absolute",
+          left: "50%",
+          bottom: 0,
+          width: 1300,
+          height: 120,
+          transform: "translateX(-50%)",
+          background: `radial-gradient(50% 50% at 50% 100%, ${alpha(COLORS.cyan, 0.22)} 0%, transparent 70%)`,
+          opacity: frontFade,
+        }}
+      />
 
       {/* turn streaks */}
       <div

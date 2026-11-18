@@ -120,18 +120,29 @@ const Corridor: React.FC = () => {
       </defs>
       <polygon points={WINDOW_QUAD} fill="#0B121A" stroke="#2B3A4A" strokeWidth={3} />
       <g clipPath="url(#mother-window)" opacity={0.92}>
-        {/* mother silhouette, softly layered so no blur filter is needed */}
-        {[0, 1, 2].map((layer) => (
-          <g key={layer} opacity={0.16 - layer * 0.04} transform={`translate(${layer * 3} ${layer * -3})`}>
-            <ellipse cx={800} cy={872} rx={46 + layer * 8} ry={52 + layer * 8} fill={COLORS.amber} />
-            <path
-              d={`M${704 - layer * 10} 1210 C${708 - layer * 10} 1070 ${734 - layer * 10} 976 ${800} 950 C${866 + layer * 10} 976 ${892 + layer * 10} 1070 ${896 + layer * 10} 1210 Z`}
-              fill={COLORS.amber}
-            />
-          </g>
-        ))}
-        <ellipse cx={800} cy={870} rx={40} ry={46} fill="#FFD37A" opacity={0.34} />
-        <path d="M712 1208 C716 1078 740 986 800 962 C860 986 884 1078 888 1208 Z" fill="#FFD37A" opacity={0.28} />
+        {/* mother: a dark human silhouette rimmed by the doorway light */}
+        <ellipse cx={800} cy={1000} rx={110} ry={230} fill="#FFD37A" opacity={0.1} />
+        <g>
+          {/* hair with a low bun, head, neck */}
+          <path d="M748 876 C740 830 766 802 800 802 C834 802 860 830 852 876 C840 852 822 842 800 842 C778 842 760 852 748 876 Z" fill="#080A0F" />
+          <circle cx={758} cy={848} r={17} fill="#080A0F" />
+          <ellipse cx={800} cy={884} rx={37} ry={43} fill="#080A0F" />
+          <path d="M782 918 L780 960 L820 960 L818 918 Z" fill="#080A0F" />
+          {/* shoulders narrow to a teacher's frame, arms held in front */}
+          <path d="M796 954 C832 960 852 986 860 1024 L874 1210 L726 1210 L740 1024 C748 986 768 960 804 954 Z" fill="#080A0F" />
+          <path d="M746 1034 C728 1084 724 1142 736 1184" stroke="#080A0F" strokeWidth={22} strokeLinecap="round" fill="none" />
+          <path d="M854 1034 C868 1080 872 1136 862 1180" stroke="#080A0F" strokeWidth={22} strokeLinecap="round" fill="none" />
+          {/* amber edge from the window */}
+          <path d="M764 842 C750 862 748 894 760 914" stroke={COLORS.amber} strokeWidth={4} strokeLinecap="round" fill="none" opacity={0.65} />
+          <path d="M742 1034 C730 1080 728 1136 738 1180" stroke={COLORS.amber} strokeWidth={3} strokeLinecap="round" fill="none" opacity={0.35} />
+          <path d="M800 806 C826 808 846 826 852 850" stroke={COLORS.amber} strokeWidth={2.6} strokeLinecap="round" fill="none" opacity={0.3} />
+        </g>
+        {/* a stack of books held at the hip */}
+        <g opacity={0.6}>
+          <path d="M848 1090 L910 1090 L910 1106 L848 1106 Z" fill="#2A1608" stroke={COLORS.amber} strokeWidth={1.2} />
+          <path d="M850 1072 L908 1072 L908 1088 L850 1088 Z" fill="#2A1608" stroke={COLORS.amber} strokeWidth={1.2} />
+          <path d="M852 1054 L906 1054 L906 1070 L852 1070 Z" fill="#2A1608" stroke={COLORS.amber} strokeWidth={1.2} />
+        </g>
       </g>
       <polygon points={WINDOW_QUAD} fill="url(#frosted-glass)" />
       {/* window mullions */}
@@ -196,7 +207,7 @@ export const Scene2: React.FC = () => {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
-  const caption = interpolate(frame, [138, 158], [0, 1], {
+  const caption = interpolate(frame, [80, 98], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
@@ -209,9 +220,9 @@ export const Scene2: React.FC = () => {
         style={{
           position: "absolute",
           left: walkX,
-          bottom: 210,
-          width: 610,
-          height: 848,
+          bottom: 180,
+          width: 670,
+          height: 931,
           opacity: interpolate(frame, [6, 16], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }),
         }}
       >
@@ -223,9 +234,9 @@ export const Scene2: React.FC = () => {
         style={{
           position: "absolute",
           left: walkX + 40,
-          bottom: 214,
-          width: 470,
-          height: 46,
+          bottom: 184,
+          width: 520,
+          height: 50,
           borderRadius: "50%",
           background: "radial-gradient(50% 50% at 50% 50%, rgba(0,0,0,0.72) 0%, transparent 74%)",
         }}
@@ -241,7 +252,8 @@ export const Scene2: React.FC = () => {
           fontFamily: FONT_MONO,
           fontSize: 34,
           letterSpacing: 1,
-          color: alpha(COLORS.ink, 0.58),
+          color: alpha(COLORS.ink, 0.85),
+          textShadow: "0 2px 18px rgba(0,0,0,0.9)",
         }}
       >
         my mother taught here.

@@ -29,7 +29,7 @@ const Waveform: React.FC<{ frame: number; opacity: number }> = ({ frame, opacity
         position: "absolute",
         left: 90,
         right: 90,
-        bottom: 118,
+        bottom: 108,
         height: 120,
         display: "flex",
         alignItems: "flex-end",
@@ -66,7 +66,7 @@ export const Scene7: React.FC = () => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  const collapse = spring({ frame: frame - 222, fps, config: { damping: 18, stiffness: 72, mass: 0.9 } });
+  const collapse = spring({ frame: frame - 222, fps, config: { damping: 22, stiffness: 110 }, durationInFrames: 42 });
   const lineWidth = interpolate(collapse, [0, 1], [0, 920]);
   const fade = interpolate(frame, [360, 390], [0, 1], {
     extrapolateLeft: "clamp",
@@ -89,7 +89,7 @@ export const Scene7: React.FC = () => {
       <div
         style={{
           position: "absolute",
-          top: 712,
+          top: 690,
           left: "50%",
           width: lineWidth,
           height: 6,
@@ -103,9 +103,9 @@ export const Scene7: React.FC = () => {
 
       {/* HUD cards */}
       {CARDS.map((card, i) => {
-        const snap = spring({ frame: frame - card.at, fps, config: { damping: 16, stiffness: 180, mass: 0.7 } });
-        const top = 356 + i * 150;
-        const collapseY = 712 - (top + 60);
+        const snap = spring({ frame: frame - card.at, fps, config: { damping: 22, stiffness: 110 } });
+        const top = 300 + i * 140;
+        const collapseY = 690 - (top + 58);
         return (
           <div
             key={card.label}
@@ -114,7 +114,7 @@ export const Scene7: React.FC = () => {
               left: "50%",
               top,
               width: 760,
-              height: 120,
+              height: 116,
               transform: `translateX(-50%) translateY(${(1 - snap) * 46 + collapse * collapseY}px) scaleX(${(0.94 + snap * 0.06) * (1 - collapse)}) scaleY(${1 - collapse * 0.96})`,
               opacity: snap * (1 - collapse),
               border: `2px solid ${alpha(COLORS.cyan, 0.75)}`,
@@ -176,9 +176,9 @@ export const Scene7: React.FC = () => {
         style={{
           position: "absolute",
           left: "50%",
-          bottom: 150,
-          width: 840,
-          height: 887,
+          bottom: 90,
+          width: 1050,
+          height: 1108,
           transform: "translateX(-50%)",
         }}
       >

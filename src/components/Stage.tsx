@@ -139,9 +139,9 @@ export const Chrome: React.FC<ChromeProps> = ({
         <rect width="100%" height="100%" filter="url(#episode-grain)" />
       </svg>
 
-      {/* vignette */}
+      {/* vignette — light enough that edge titles keep their value */}
       <AbsoluteFill
-        style={{ boxShadow: "inset 0 0 320px 90px rgba(0,0,0,0.78)" }}
+        style={{ boxShadow: "inset 0 0 260px 54px rgba(0,0,0,0.55)" }}
       />
 
       {/* episode mark + timecode */}

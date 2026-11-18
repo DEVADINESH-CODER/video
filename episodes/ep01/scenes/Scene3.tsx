@@ -82,12 +82,12 @@ const RailwayMap: React.FC<{ frame: number }> = ({ frame }) => {
 
 export const Scene3: React.FC = () => {
   const frame = useCurrentFrame();
-  const wipe = interpolate(frame, [78, 208], [-28, 118], {
+  const wipe = interpolate(frame, [64, 150], [-28, 118], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
   const wiping = wipe > -20 && wipe < 116;
-  const caption = interpolate(frame, [244, 264], [0, 1], {
+  const caption = interpolate(frame, [126, 142], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
@@ -143,7 +143,7 @@ export const Scene3: React.FC = () => {
               width: beam.width,
               height: 1400,
               transform: "rotate(26deg)",
-              background: `linear-gradient(90deg, transparent 0%, ${alpha(beam.amber ? COLORS.amber : COLORS.cyan, 0.16)} 45%, ${alpha(beam.amber ? COLORS.amber : COLORS.cyan, 0.04)} 100%)`,
+              background: `linear-gradient(90deg, transparent 0%, ${alpha(beam.amber ? COLORS.amber : COLORS.cyan, 0.11)} 45%, ${alpha(beam.amber ? COLORS.amber : COLORS.cyan, 0.03)} 100%)`,
             }}
           />
         ))}
@@ -194,10 +194,10 @@ export const Scene3: React.FC = () => {
             <div
         style={{
           position: "absolute",
-          left: 60,
-          bottom: 280,
-          width: 660,
-          height: 697,
+          left: 50,
+          bottom: 220,
+          width: 740,
+          height: 781,
         }}
       >
         <ExplorerAvatar cameraAngle="chest_up_3_4" outfit="school_uniform" expression="determined" rim={COLORS.cyan} />
@@ -205,11 +205,11 @@ export const Scene3: React.FC = () => {
       <div
         style={{
           position: "absolute",
-          left: 60,
-          bottom: 280,
-          width: 660,
-          height: 697,
-          clipPath: `polygon(${wipe + 20}% 0, 100% 0, 100% 100%, ${wipe - 14}% 100%)`,
+          left: 50,
+          bottom: 220,
+          width: 740,
+          height: 781,
+          clipPath: `polygon(0 0, ${wipe + 8}% 0, ${wipe - 8}% 100%, 0 100%)`,
         }}
       >
         <ExplorerAvatar cameraAngle="chest_up_3_4" outfit="travel_backpack" expression="determined" rim={COLORS.amber} />
@@ -222,10 +222,10 @@ export const Scene3: React.FC = () => {
           left: `${wipe}%`,
           top: 0,
           bottom: 0,
-          width: 64,
+          width: 30,
           transform: "translateX(-50%) skewX(-9deg)",
           background: `linear-gradient(90deg, transparent 0%, ${alpha(COLORS.cyan, 0.5)} 42%, ${alpha(COLORS.ink, 0.85)} 50%, ${alpha(COLORS.amber, 0.4)} 58%, transparent 100%)`,
-          opacity: wiping ? 0.55 : 0,
+          opacity: wiping ? 0.28 : 0,
           pointerEvents: "none",
         }}
       />
@@ -234,11 +234,11 @@ export const Scene3: React.FC = () => {
       <div
         style={{
           position: "absolute",
-          right: 12,
-          top: 560,
-          width: 280,
-          height: 300,
-          opacity: interpolate(frame, [196, 224], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }),
+          right: 36,
+          top: 356,
+          width: 216,
+          height: 230,
+          opacity: interpolate(frame, [118, 140], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }),
           transform: "rotate(-4deg)",
         }}
       >
@@ -247,11 +247,11 @@ export const Scene3: React.FC = () => {
       <div
         style={{
           position: "absolute",
-          right: 10,
-          top: 930,
-          width: 300,
-          height: 390,
-          opacity: interpolate(frame, [176, 206], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }),
+          right: 54,
+          top: 600,
+          width: 220,
+          height: 288,
+          opacity: interpolate(frame, [108, 132], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }),
         }}
       >
         <RailwayMap frame={frame} />
@@ -266,7 +266,8 @@ export const Scene3: React.FC = () => {
           transform: `translateY(${(1 - caption) * 18}px)`,
           fontFamily: FONT_MONO,
           fontSize: 34,
-          color: alpha(COLORS.ink, 0.58),
+          color: alpha(COLORS.ink, 0.85),
+          textShadow: "0 2px 18px rgba(0,0,0,0.9)",
         }}
       >
         nobody was teaching this.

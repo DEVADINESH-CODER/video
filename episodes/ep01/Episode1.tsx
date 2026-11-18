@@ -39,7 +39,12 @@ if (SCENE_COMPONENTS.length !== EPISODE.scenes.length) {
 export const Episode1: React.FC = () => {
   return (
     <AbsoluteFill style={{ backgroundColor: COLORS.bgDeep }}>
-      {/* Plays public/audio/ep01_voice.wav once it exists; silent until then. */}
+      {/*
+       * Voiceover is optional: <Voiceover> plays public/audio/ep01_voice.wav
+       * when the file exists and stays silent when it does not, so a fresh
+       * clone still renders. To force a track, use the commented form:
+       * <Audio src={staticFile("audio/ep01_voice.wav")} />
+       */}
       <Voiceover src={EPISODE.voiceover} />
 
       {EPISODE.scenes.map((scene, index) => {
