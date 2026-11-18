@@ -213,51 +213,39 @@ export const Scene5: React.FC = () => {
           style={{
             position: "absolute",
             left: "50%",
-            bottom: 128,
-            width: 860,
-            height: 210,
+            bottom: 0,
+            width: 900,
+            height: 380,
             transform: "translateX(-50%)",
-            background: `radial-gradient(50% 50% at 50% 50%, ${alpha(COLORS.amber, 0.24)} 0%, transparent 72%)`,
+            background: `radial-gradient(50% 50% at 50% 50%, ${alpha(COLORS.amber, 0.22)} 0%, transparent 72%)`,
           }}
         />
 
-        {/* the two of them */}
+        {/* the two of them, close two-shot */}
         <div
           style={{
             position: "absolute",
             left: "50%",
-            bottom: 158,
-            width: 300,
-            height: 550,
-            transform: "translateX(-80%)",
-          }}
-        >
-          <ExplorerAvatar pose="together" expression="hopeful" isSpeaking={false} />
-        </div>
-        <div
-          style={{
-            position: "absolute",
-            left: "50%",
-            bottom: 158,
-            width: 280,
-            height: 500,
-            transform: "translateX(-14%)",
+            bottom: -68,
+            width: 720,
+            height: 760,
+            transform: "translateX(-19.4%)",
           }}
         >
           <Ammu />
         </div>
-
-        {/* floor line */}
         <div
           style={{
             position: "absolute",
-            left: 96,
-            right: 96,
-            bottom: 152,
-            height: 2,
-            background: `linear-gradient(90deg, transparent, ${alpha(COLORS.amber, 0.55)}, transparent)`,
+            left: "50%",
+            bottom: 0,
+            width: 682,
+            height: 720,
+            transform: "translateX(-72%)",
           }}
-        />
+        >
+          <ExplorerAvatar pose="together" expression="hopeful" isSpeaking={false} />
+        </div>
 
         {/* rising dust, amber */}
         {dust.map((mote) => (

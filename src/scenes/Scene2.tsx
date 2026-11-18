@@ -37,7 +37,6 @@ export const Scene2: React.FC = () => {
   const trail = ROUTE.at(Math.max(0, travel - 0.012));
   const trail2 = ROUTE.at(Math.max(0, travel - 0.024));
 
-  const sleeperOffset = (frame * 7) % 64;
   const speedLines = Array.from({ length: 12 }, (_, i) => ({
     y: 70 + ((i * 137) % 420),
     offset: (frame * (9 + (i % 4)) + i * 181) % 1400,
@@ -150,7 +149,7 @@ export const Scene2: React.FC = () => {
             top: 434,
             left: 60,
             width: 960,
-            height: 812,
+            height: 700,
             borderRadius: 30,
             border: `1.5px solid ${alpha(COLORS.cyan, 0.32)}`,
             background:
@@ -391,9 +390,9 @@ export const Scene2: React.FC = () => {
           style={{
             position: "absolute",
             left: "50%",
-            bottom: 74,
-            width: 316,
-            height: 580,
+            bottom: 0,
+            width: 663,
+            height: 700,
             transform: "translateX(-50%)",
           }}
         >
@@ -402,8 +401,8 @@ export const Scene2: React.FC = () => {
               position: "absolute",
               left: "50%",
               bottom: 18,
-              width: 460,
-              height: 300,
+              width: 640,
+              height: 360,
               transform: "translateX(-50%)",
               background: `radial-gradient(50% 50% at 50% 50%, ${alpha(COLORS.cyan, 0.18)} 0%, transparent 70%)`,
             }}
@@ -412,43 +411,6 @@ export const Scene2: React.FC = () => {
             pose="walking_train"
             expression="determined"
             isSpeaking={false}
-          />
-        </div>
-
-        {/* moving rail + sleepers */}
-        <div
-          style={{
-            position: "absolute",
-            left: 0,
-            right: 0,
-            bottom: 84,
-            height: 26,
-            overflow: "hidden",
-          }}
-        >
-          {Array.from({ length: 24 }, (_, i) => (
-            <div
-              key={i}
-              style={{
-                position: "absolute",
-                left: i * 64 - sleeperOffset,
-                bottom: 0,
-                width: 34,
-                height: 26,
-                background: alpha(COLORS.cyan, i % 2 === 0 ? 0.22 : 0.12),
-              }}
-            />
-          ))}
-          <div
-            style={{
-              position: "absolute",
-              left: 0,
-              right: 0,
-              bottom: 6,
-              height: 2,
-              background: alpha(COLORS.cyan, 0.7),
-              boxShadow: `0 0 16px ${alpha(COLORS.cyan, 0.6)}`,
-            }}
           />
         </div>
       </AbsoluteFill>

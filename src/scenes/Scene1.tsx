@@ -117,7 +117,7 @@ export const Scene1: React.FC = () => {
         <div
           style={{
             position: "absolute",
-            top: 452,
+            top: 330,
             left: 60,
             width: 960,
             height: 222,
@@ -238,7 +238,7 @@ export const Scene1: React.FC = () => {
                 style={{
                   position: "absolute",
                   left: 540 + particle.x,
-                  top: 562 + particle.y,
+                  top: 442 + particle.y,
                   width: particle.size,
                   height: particle.size * 2.2,
                   background: particle.color,
@@ -254,7 +254,7 @@ export const Scene1: React.FC = () => {
         <div
           style={{
             position: "absolute",
-            top: 776,
+            top: 640,
             left: 0,
             right: 0,
             display: "flex",
@@ -314,9 +314,9 @@ export const Scene1: React.FC = () => {
           style={{
             position: "absolute",
             left: "50%",
-            bottom: 96,
-            width: 424,
-            height: 778,
+            bottom: 0,
+            width: 820,
+            height: 866,
             transform: `translateX(-50%) scale(${1 + frame * 0.00008})`,
           }}
         >
@@ -325,26 +325,14 @@ export const Scene1: React.FC = () => {
               position: "absolute",
               left: "50%",
               bottom: 30,
-              width: 560,
-              height: 380,
+              width: 700,
+              height: 520,
               transform: "translateX(-50%)",
-              background: `radial-gradient(50% 50% at 50% 50%, ${alpha(COLORS.crimson, 0.22)} 0%, transparent 70%)`,
+              background: `radial-gradient(50% 50% at 50% 50%, ${alpha(COLORS.crimson, 0.2)} 0%, transparent 70%)`,
             }}
           />
           <ExplorerAvatar pose="standing" expression="intense" isSpeaking={false} />
         </div>
-
-        {/* floor */}
-        <div
-          style={{
-            position: "absolute",
-            left: 120,
-            right: 120,
-            bottom: 118,
-            height: 2,
-            background: `linear-gradient(90deg, transparent, ${alpha(COLORS.crimson, 0.5)}, transparent)`,
-          }}
-        />
       </AbsoluteFill>
     </Stage>
   );

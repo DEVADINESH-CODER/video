@@ -5,7 +5,7 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
-import { COLORS, FONT_DISPLAY, FONT_MONO } from "../theme";
+import { COLORS, FONT_MONO } from "../theme";
 import { alpha, Kicker, Stage } from "../components/Stage";
 import { ExplorerAvatar } from "../components/ExplorerAvatar";
 
@@ -454,14 +454,14 @@ export const Scene3: React.FC = () => {
           </div>
         </div>
 
-        {/* character at the desk */}
+        {/* character, waist-up at the holographic keyboard */}
         <div
           style={{
             position: "absolute",
             left: "50%",
-            top: 1130,
-            width: 334,
-            height: 612,
+            top: 1110,
+            width: 758,
+            height: 800,
             transform: "translateX(-50%)",
           }}
         >
@@ -469,97 +469,14 @@ export const Scene3: React.FC = () => {
             style={{
               position: "absolute",
               left: "50%",
-              top: 0,
-              width: 540,
-              height: 380,
+              top: 20,
+              width: 640,
+              height: 420,
               transform: "translateX(-50%)",
-              background: `radial-gradient(50% 50% at 50% 45%, ${alpha(COLORS.cyan, 0.16)} 0%, transparent 70%)`,
+              background: `radial-gradient(50% 50% at 50% 45%, ${alpha(COLORS.cyan, 0.14)} 0%, transparent 70%)`,
             }}
           />
           <ExplorerAvatar pose="coding" expression="determined" isSpeaking={false} />
-        </div>
-
-        {/* desk */}
-        <div
-          style={{
-            position: "absolute",
-            left: 0,
-            right: 0,
-            top: 1532,
-            bottom: 0,
-            background:
-              "linear-gradient(180deg, #11151C 0%, #0A0D12 26%, #05070A 100%)",
-            borderTop: `2px solid ${alpha(COLORS.cyan, 0.35)}`,
-            boxShadow: `0 -20px 60px ${alpha(COLORS.cyan, 0.1)}`,
-          }}
-        >
-          {/* laptop lid, back to camera */}
-          <div
-            style={{
-              position: "absolute",
-              left: "50%",
-              top: -150,
-              width: 340,
-              height: 150,
-              transform: "translateX(-50%) perspective(600px) rotateX(6deg)",
-              borderRadius: "12px 12px 3px 3px",
-              background: "linear-gradient(180deg, #1B2A31, #0D151B)",
-              border: `1.5px solid ${alpha(COLORS.cyan, 0.4)}`,
-              boxShadow: `0 0 40px ${alpha(COLORS.cyan, 0.16)}`,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <div
-              style={{
-                width: 56,
-                height: 56,
-                borderRadius: 14,
-                border: `2px solid ${alpha(COLORS.cyan, 0.55)}`,
-                boxShadow: `0 0 24px ${alpha(COLORS.cyan, 0.25)}`,
-              }}
-            />
-          </div>
-          <div
-            style={{
-              position: "absolute",
-              left: "50%",
-              top: 0,
-              width: 420,
-              height: 16,
-              transform: "translateX(-50%)",
-              background: "linear-gradient(180deg, #1C232D, #10151C)",
-              borderRadius: 4,
-              border: `1px solid ${alpha(COLORS.cyan, 0.18)}`,
-            }}
-          />
-          <div
-            style={{
-              position: "absolute",
-              left: 72,
-              top: 64,
-              fontFamily: FONT_MONO,
-              fontSize: 21,
-              letterSpacing: 4,
-              color: alpha(COLORS.ink, 0.25),
-            }}
-          >
-            WORKBENCH / 02:14 AM
-          </div>
-          <div
-            style={{
-              position: "absolute",
-              right: 72,
-              top: 64,
-              fontFamily: FONT_DISPLAY,
-              fontSize: 22,
-              fontStyle: "italic",
-              color: alpha(COLORS.cyan, 0.4),
-            }}
-          >
-            no rote allowed
-          </div>
         </div>
       </AbsoluteFill>
     </Stage>

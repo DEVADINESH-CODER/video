@@ -25,6 +25,9 @@
   "scripts": {
     "dev": "remotion studio",
     "build": "remotion bundle",
+    "render": "remotion render Episode1 out/episode1.mp4",
+    "still": "remotion still Episode1 out/keyframe.png --frame=120",
+    "render:keyframes": "bash scripts/render-keyframes.sh",
     "upgrade": "remotion upgrade",
     "lint": "eslint src && tsc"
   },

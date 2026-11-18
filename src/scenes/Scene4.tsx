@@ -269,14 +269,14 @@ export const Scene4: React.FC = () => {
           />
         </div>
 
-        {/* the character at the desk */}
+        {/* the character, waist-up under the red light */}
         <div
           style={{
             position: "absolute",
             left: "50%",
-            top: 1102,
-            width: 388,
-            height: 712,
+            top: 1096,
+            width: 778,
+            height: 824,
             transform: `translateX(-50%) scale(${1 + switchFlash * 0.012})`,
           }}
         >
@@ -285,8 +285,8 @@ export const Scene4: React.FC = () => {
               position: "absolute",
               left: "50%",
               top: 40,
-              width: 520,
-              height: 460,
+              width: 620,
+              height: 520,
               transform: "translateX(-50%)",
               background: `radial-gradient(50% 50% at 50% 50%, ${alpha(active ? COLORS.crimson : COLORS.green, 0.16)} 0%, transparent 70%)`,
             }}
@@ -296,116 +296,6 @@ export const Scene4: React.FC = () => {
             expression={active ? "hurt" : "determined"}
             isSpeaking={false}
           />
-        </div>
-
-        {/* desk foreground with the exam papers */}
-        <div
-          style={{
-            position: "absolute",
-            left: 0,
-            right: 0,
-            top: 1616,
-            bottom: 0,
-            background:
-              "linear-gradient(180deg, #140C10 0%, #0B0709 30%, #060406 100%)",
-            borderTop: `2px solid ${alpha(COLORS.crimson, 0.35)}`,
-            boxShadow: `0 -24px 70px ${alpha(COLORS.crimson, 0.14)}`,
-          }}
-        >
-          {[0, 1, 2].map((sheet) => (
-            <div
-              key={sheet}
-              style={{
-                position: "absolute",
-                left: 96 + sheet * 34,
-                top: -58 + sheet * 16,
-                width: 300,
-                height: 150,
-                borderRadius: 6,
-                background:
-                  sheet === 0
-                    ? "linear-gradient(160deg, #23262E, #14171D)"
-                    : "linear-gradient(160deg, #1C1F26, #101318)",
-                border: `1px solid ${alpha(COLORS.ink, 0.12)}`,
-                transform: `rotate(${-6 + sheet * 4}deg)`,
-                boxShadow: "0 12px 24px rgba(0,0,0,0.45)",
-                padding: "18px 20px",
-              }}
-            >
-              <div
-                style={{
-                  fontFamily: FONT_MONO,
-                  fontSize: 17,
-                  letterSpacing: 2,
-                  color: alpha(COLORS.ink, 0.4),
-                  marginBottom: 10,
-                }}
-              >
-                EXAM · {String(68 + sheet).padStart(2, "0")}
-              </div>
-              {[0, 1, 2].map((rule) => (
-                <div
-                  key={rule}
-                  style={{
-                    height: 2,
-                    marginBottom: 9,
-                    width: `${86 - rule * 16}%`,
-                    background: alpha(COLORS.ink, 0.12),
-                  }}
-                />
-              ))}
-              <div
-                style={{
-                  position: "absolute",
-                  right: 18,
-                  bottom: 14,
-                  fontFamily: FONT_MONO,
-                  fontSize: 20,
-                  letterSpacing: 3,
-                  color: alpha(COLORS.crimson, 0.8),
-                  transform: "rotate(-8deg)",
-                  border: `1.5px solid ${alpha(COLORS.crimson, 0.5)}`,
-                  padding: "2px 8px",
-                }}
-              >
-                FAILED
-              </div>
-            </div>
-          ))}
-          <div
-            style={{
-              position: "absolute",
-              right: 92,
-              top: -26,
-              width: 260,
-              height: 74,
-              borderRadius: 8,
-              background: "linear-gradient(180deg, #1E222B, #12161C)",
-              border: `1px solid ${alpha(COLORS.ink, 0.12)}`,
-              transform: "rotate(4deg)",
-            }}
-          >
-            <div
-              style={{
-                position: "absolute",
-                inset: 12,
-                border: `1px solid ${alpha(COLORS.crimson, 0.3)}`,
-              }}
-            />
-            <div
-              style={{
-                position: "absolute",
-                left: 26,
-                top: 22,
-                fontFamily: FONT_MONO,
-                fontSize: 18,
-                letterSpacing: 4,
-                color: alpha(COLORS.ink, 0.42),
-              }}
-            >
-              RRB NTPC · 71
-            </div>
-          </div>
         </div>
 
         {/* crimson takeover */}
