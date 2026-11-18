@@ -32,13 +32,15 @@ export const FONT_DISPLAY =
 export const FONT_MONO =
   "'JetBrains Mono','SFMono-Regular',Menlo,'DejaVu Sans Mono',monospace";
 
-/** Episode timing — 30 fps, 60 seconds, vertical. */
+/** Episode timing — 30 fps, 58 seconds, vertical. */
 export const FPS = 30;
-export const EPISODE_FRAMES = 1800;
+export const EPISODE_FRAMES = 1740;
 export const SCENES = [
-  {from: 0, duration: 180, name: "The label"},
-  {from: 180, duration: 360, name: "The escape"},
-  {from: 540, duration: 360, name: "The method"},
-  {from: 900, duration: 450, name: "The scoreboard"},
-  {from: 1350, duration: 450, name: "The reason"},
+  { from: 0, duration: 120, name: "The doorway", accent: COLORS.amber },
+  { from: 120, duration: 210, name: "The corridor", accent: COLORS.cyan },
+  { from: 330, duration: 330, name: "The train", accent: COLORS.cyan },
+  { from: 660, duration: 240, name: "The gate", accent: COLORS.crimson },
+  { from: 900, duration: 240, name: "Worthless", accent: COLORS.crimson },
+  { from: 1140, duration: 210, name: "The turn", accent: COLORS.cyan },
+  { from: 1350, duration: 390, name: "The proof", accent: COLORS.cyan },
 ] as const;

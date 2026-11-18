@@ -7,333 +7,167 @@ import {
   useVideoConfig,
 } from "remotion";
 import { COLORS, FONT_DISPLAY, FONT_MONO } from "../theme";
-import { alpha, Kicker, Stage } from "../components/Stage";
+import { alpha } from "../components/Stage";
 import { ExplorerAvatar } from "../components/ExplorerAvatar";
 
-const SLAM = 26;
-const SHATTER = 108;
-
-const BADGES = ["AGE: 21", "TECH TRAINER", "AI STARTUP"];
-
-const StampFace: React.FC = () => {
-  return (
-    <div
-      style={{
-        width: 960,
-        height: 222,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      <div
-        style={{
-          fontFamily: FONT_DISPLAY,
-          fontSize: 132,
-          fontWeight: 900,
-          letterSpacing: 2,
-          lineHeight: 1,
-          color: COLORS.crimson,
-          border: `6px solid ${COLORS.crimson}`,
-          borderRadius: 12,
-          padding: "8px 30px 20px",
-          background: alpha(COLORS.crimson, 0.08),
-          boxShadow: `0 0 60px ${alpha(COLORS.crimson, 0.4)}, inset 0 0 34px ${alpha(COLORS.crimson, 0.16)}`,
-          whiteSpace: "nowrap",
-        }}
-      >
-        WORTHLESS
-      </div>
-    </div>
-  );
-};
-
+/**
+ * Scene 1 · 0 – 120
+ * A warm doorway opens on pitch black; he walks out of the light, away from us.
+ */
 export const Scene1: React.FC = () => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  const slamSpring = spring({
-    frame: frame - SLAM,
-    fps,
-    config: { damping: 13, stiffness: 180, mass: 0.8 },
+  const door = spring({ frame, fps, config: { damping: 30, stiffness: 34, mass: 1 } });
+  const walk = interpolate(frame, [0, 120], [0, 1], {
+    extrapolateRight: "clamp",
+    easing: Easing.inOut(Easing.quad),
   });
-  const stampScale = interpolate(slamSpring, [0, 1], [2.35, 1]);
-  const stampOpacity = interpolate(frame, [SLAM, SLAM + 5], [0, 1], {
+  const title = spring({ frame: frame - 52, fps, config: { damping: 20, stiffness: 110 } });
+  const titleOpacity = interpolate(frame, [52, 66], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
-
-  const shake = interpolate(frame, [SLAM, SLAM + 34], [30, 0], {
+  const bodyIn = interpolate(frame, [0, 14], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
-    easing: Easing.out(Easing.cubic),
-  });
-  const shakeX = Math.sin(frame * 1.9) * shake + Math.sin(frame * 5.1) * shake * 0.3;
-  const shakeY = Math.cos(frame * 2.3) * shake * 0.45;
-
-  const shatter = interpolate(frame, [SHATTER, SHATTER + 40], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-    easing: Easing.out(Easing.cubic),
-  });
-
-  const glitchOn = frame > SLAM && Math.sin(frame * 0.42) > 0.9;
-  const glitchX = Math.sin(frame * 2.7) * 14;
-
-  const slices = Array.from({ length: 8 }, (_, i) => {
-    const dir = i % 2 === 0 ? -1 : 1;
-    return {
-      i,
-      dx: dir * (110 + i * 26) * shatter,
-      dy: (i - 3.5) * 30 * shatter,
-      rot: dir * (4 + i * 2.4) * shatter,
-      opacity: 1 - shatter * 0.92,
-    };
-  });
-
-  const particles = Array.from({ length: 16 }, (_, i) => {
-    const angle = (i / 16) * Math.PI * 2 + 0.4;
-    return {
-      i,
-      x: Math.cos(angle) * (240 + (i % 4) * 90) * shatter,
-      y: Math.sin(angle) * (150 + (i % 3) * 80) * shatter,
-      size: 4 + (i % 4) * 2,
-      color: i % 3 === 0 ? COLORS.crimson : COLORS.cyan,
-    };
   });
 
   return (
-    <Stage accent={COLORS.crimson} intensity={1.1} grid={false}>
+    <AbsoluteFill style={{ backgroundColor: "#0B0D12", overflow: "hidden" }}>
+      {/* amber air around the door */}
       <AbsoluteFill
         style={{
-          transform: `translate(${shakeX}px, ${shakeY}px)`,
+          background: `radial-gradient(58% 46% at 50% 62%, ${alpha(COLORS.amber, 0.3 * door)} 0%, ${alpha(COLORS.amber, 0.08 * door)} 46%, transparent 76%)`,
+        }}
+      />
+
+      {/* doorway */}
+      <div
+        style={{
+          position: "absolute",
+          left: "50%",
+          bottom: 150,
+          width: 430,
+          height: 780,
+          transform: `translateX(-50%) scaleY(${0.04 + door * 0.96})`,
+          transformOrigin: "50% 100%",
+          borderRadius: "215px 215px 0 0",
+          border: `5px solid ${alpha(COLORS.amber, 0.55)}`,
+          background: `linear-gradient(180deg, ${alpha("#FFF3D0", 0.55)} 0%, ${alpha(COLORS.amber, 0.38)} 42%, ${alpha(COLORS.amber, 0.16)} 100%)`,
+          boxShadow: `0 0 140px 30px ${alpha(COLORS.amber, 0.5)}, inset 0 0 90px ${alpha("#FFF1C4", 0.5)}`,
+          opacity: 0.2 + door * 0.8,
+        }}
+      />
+      {/* door inner darkness at the threshold */}
+      <div
+        style={{
+          position: "absolute",
+          left: "50%",
+          bottom: 150,
+          width: 360,
+          height: 640,
+          transform: "translateX(-50%)",
+          borderRadius: "180px 180px 0 0",
+          background: `linear-gradient(180deg, ${alpha("#0B0D12", 0.55)} 0%, ${alpha("#0B0D12", 0.08)} 70%, transparent 100%)`,
+          opacity: door,
+        }}
+      />
+      {/* light spilling toward camera */}
+      <div
+        style={{
+          position: "absolute",
+          left: "50%",
+          bottom: 0,
+          width: 1100,
+          height: 1000,
+          transform: "translateX(-50%)",
+          clipPath: "polygon(41% 0, 59% 0, 100% 100%, 0% 100%)",
+          background: `linear-gradient(180deg, ${alpha(COLORS.amber, 0.26 * door)} 0%, ${alpha(COLORS.amber, 0.05 * door)} 62%, transparent 100%)`,
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          left: "50%",
+          bottom: 90,
+          width: 760,
+          height: 120,
+          transform: "translateX(-50%)",
+          borderRadius: "50%",
+          background: `radial-gradient(50% 50% at 50% 50%, ${alpha(COLORS.amber, 0.4 * door)} 0%, transparent 72%)`,
+        }}
+      />
+
+      {/* he walks away from us */}
+      <div
+        style={{
+          position: "absolute",
+          left: "50%",
+          bottom: 40,
+          width: 650,
+          height: 900,
+          transform: `translateX(-50%) translateY(${-walk * 26}px) scale(${1.03 - walk * 0.13})`,
+          opacity: bodyIn,
         }}
       >
-        <Kicker color={COLORS.crimson} style={{ position: "absolute", top: 148, left: 58 }}>
-          The label
-        </Kicker>
+        <ExplorerAvatar cameraAngle="back_walk" outfit="school_uniform" rim={COLORS.amber} />
+      </div>
 
-        {/* the word */}
+      {/* title */}
+      <div
+        style={{
+          position: "absolute",
+          top: 196,
+          left: 56,
+          right: 56,
+          opacity: titleOpacity,
+          transform: `translateY(${(1 - title) * 58}px) scale(${0.94 + title * 0.06})`,
+          transformOrigin: "50% 50%",
+        }}
+      >
         <div
           style={{
-            position: "absolute",
-            top: 330,
-            left: 60,
-            width: 960,
-            height: 222,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            opacity: stampOpacity,
-            transform: `scale(${stampScale})`,
+            fontFamily: FONT_MONO,
+            fontSize: 30,
+            letterSpacing: 10,
+            color: alpha(COLORS.amber, 0.78),
+            marginBottom: 18,
           }}
         >
-          {/* impact flash + ring */}
-          {frame >= SLAM && frame < SLAM + 26 ? (
-            <>
-              <div
-                style={{
-                  position: "absolute",
-                  width: 760,
-                  height: 180,
-                  borderRadius: "50%",
-                  border: `3px solid ${COLORS.crimson}`,
-                  transform: `scale(${interpolate(frame, [SLAM, SLAM + 26], [0.4, 2.5], { extrapolateRight: "clamp" })})`,
-                  opacity: interpolate(frame, [SLAM, SLAM + 26], [0.8, 0], {
-                    extrapolateRight: "clamp",
-                  }),
-                  boxShadow: `0 0 60px ${alpha(COLORS.crimson, 0.7)}`,
-                }}
-              />
-              <AbsoluteFill
-                style={{
-                  background: alpha(COLORS.crimson, 0.32),
-                  opacity: interpolate(frame, [SLAM, SLAM + 12], [0.85, 0], {
-                    extrapolateRight: "clamp",
-                  }),
-                  mixBlendMode: "screen",
-                }}
-              />
-            </>
-          ) : null}
-
-          {frame < SHATTER ? (
-            <>
-              {glitchOn ? (
-                <>
-                  <div
-                    style={{
-                      position: "absolute",
-                      transform: `translate(${glitchX}px, -3px)`,
-                      opacity: 0.75,
-                      mixBlendMode: "screen",
-                      filter: "blur(0.4px)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontFamily: FONT_DISPLAY,
-                        fontSize: 132,
-                        fontWeight: 900,
-                        letterSpacing: 2,
-                        color: COLORS.cyan,
-                        whiteSpace: "nowrap",
-                        lineHeight: 1,
-                      }}
-                    >
-                      WORTHLESS
-                    </div>
-                  </div>
-                  <div
-                    style={{
-                      position: "absolute",
-                      transform: `translate(${-glitchX * 0.6}px, 2px)`,
-                      opacity: 0.5,
-                      mixBlendMode: "screen",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontFamily: FONT_DISPLAY,
-                        fontSize: 132,
-                        fontWeight: 900,
-                        letterSpacing: 2,
-                        color: "#FFFFFF",
-                        whiteSpace: "nowrap",
-                        lineHeight: 1,
-                      }}
-                    >
-                      WORTHLESS
-                    </div>
-                  </div>
-                </>
-              ) : null}
-              <StampFace />
-            </>
-          ) : (
-            <div style={{ position: "relative", width: 960, height: 222 }}>
-              {slices.map((slice) => (
-                <div
-                  key={slice.i}
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    clipPath: `inset(${slice.i * 12.5}% 0 ${100 - (slice.i + 1) * 12.5}% 0)`,
-                    transform: `translate(${slice.dx}px, ${slice.dy}px) rotate(${slice.rot}deg)`,
-                    opacity: slice.opacity,
-                  }}
-                >
-                  <StampFace />
-                </div>
-              ))}
-            </div>
-          )}
+          THE FIRST MORNING
         </div>
-
-        {/* crimson shards turning cyan */}
-        {frame >= SHATTER
-          ? particles.map((particle) => (
-              <div
-                key={particle.i}
-                style={{
-                  position: "absolute",
-                  left: 540 + particle.x,
-                  top: 442 + particle.y,
-                  width: particle.size,
-                  height: particle.size * 2.2,
-                  background: particle.color,
-                  opacity: 1 - shatter,
-                  transform: `rotate(${particle.i * 37}deg)`,
-                  boxShadow: `0 0 14px ${alpha(particle.color, 0.8)}`,
-                }}
-              />
-            ))
-          : null}
-
-        {/* the words that replaced the label */}
         <div
           style={{
-            position: "absolute",
-            top: 640,
-            left: 0,
-            right: 0,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: 22,
+            fontFamily: FONT_DISPLAY,
+            fontWeight: 900,
+            fontSize: 168,
+            lineHeight: 0.92,
+            letterSpacing: -2,
+            color: COLORS.amber,
+            textShadow: `0 0 46px ${alpha(COLORS.amber, 0.45)}`,
           }}
         >
-          {BADGES.map((badge, index) => {
-            const start = SHATTER + 10 + index * 8;
-            const pop = spring({
-              frame: frame - start,
-              fps,
-              config: { damping: 11, stiffness: 190, mass: 0.55 },
-            });
-            const drift = Math.sin((frame - start) * 0.05 + index) * 3;
-            return (
-              <div
-                key={badge}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 18,
-                  padding: "18px 34px",
-                  border: `2px solid ${alpha(COLORS.cyan, 0.75)}`,
-                  background: alpha(COLORS.cyan, 0.08),
-                  boxShadow: `0 0 34px ${alpha(COLORS.cyan, 0.18)}, inset 0 0 22px ${alpha(COLORS.cyan, 0.08)}`,
-                  clipPath:
-                    "polygon(18px 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%, 0 18px)",
-                  fontFamily: FONT_MONO,
-                  fontSize: 38,
-                  letterSpacing: 4,
-                  color: COLORS.ink,
-                  textTransform: "uppercase",
-                  opacity: interpolate(pop, [0, 0.25], [0, 1], {
-                    extrapolateRight: "clamp",
-                  }),
-                  transform: `translate(${index === 1 ? 42 : index === 2 ? -30 : 0}px, ${drift}px) scale(${interpolate(pop, [0, 1], [0.72, 1])}) rotate(${index === 1 ? 1.6 : index === 2 ? -1.4 : 0}deg)`,
-                }}
-              >
-                <span
-                  style={{
-                    width: 12,
-                    height: 12,
-                    background: COLORS.cyan,
-                    boxShadow: `0 0 14px ${COLORS.cyan}`,
-                  }}
-                />
-                {badge}
-              </div>
-            );
-          })}
+          21 DAYS
         </div>
-
-        {/* the character under the label */}
         <div
           style={{
-            position: "absolute",
-            left: "50%",
-            bottom: 0,
-            width: 820,
-            height: 866,
-            transform: `translateX(-50%) scale(${1 + frame * 0.00008})`,
+            marginTop: 26,
+            width: 320,
+            height: 5,
+            background: `linear-gradient(90deg, ${COLORS.amber} 0%, ${alpha(COLORS.amber, 0)} 100%)`,
+            boxShadow: `0 0 22px ${alpha(COLORS.amber, 0.6)}`,
           }}
-        >
-          <div
-            style={{
-              position: "absolute",
-              left: "50%",
-              bottom: 30,
-              width: 700,
-              height: 520,
-              transform: "translateX(-50%)",
-              background: `radial-gradient(50% 50% at 50% 50%, ${alpha(COLORS.crimson, 0.2)} 0%, transparent 70%)`,
-            }}
-          />
-          <ExplorerAvatar pose="standing" expression="intense" isSpeaking={false} />
-        </div>
-      </AbsoluteFill>
-    </Stage>
+        />
+      </div>
+
+      {/* floor darkness swallowing the light */}
+      <AbsoluteFill
+        style={{
+          background: "linear-gradient(180deg, transparent 52%, rgba(2,3,7,0.72) 100%)",
+          pointerEvents: "none",
+        }}
+      />
+    </AbsoluteFill>
   );
 };

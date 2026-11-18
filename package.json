@@ -30,7 +30,7 @@
     "upgrade": "remotion upgrade",
     "lint": "eslint src && tsc",
     "render:ep1": "npx remotion render Episode1 out/episode1.mp4 --concurrency=100%",
-    "stills:ep1": "mkdir -p out/stills && npx remotion still Episode1 out/stills/frame-60.png --frame=60 && npx remotion still Episode1 out/stills/frame-220.png --frame=220 && npx remotion still Episode1 out/stills/frame-480.png --frame=480 && npx remotion still Episode1 out/stills/frame-780.png --frame=780 && npx remotion still Episode1 out/stills/frame-1020.png --frame=1020 && npx remotion still Episode1 out/stills/frame-1240.png --frame=1240 && npx remotion still Episode1 out/stills/frame-1550.png --frame=1550"
+    "stills:ep1": "mkdir -p out/stills && npx remotion still Episode1 out/stills/frame-60.png --frame=60 && npx remotion still Episode1 out/stills/frame-220.png --frame=220 && npx remotion still Episode1 out/stills/frame-480.png --frame=480 && npx remotion still Episode1 out/stills/frame-700.png --frame=700 && npx remotion still Episode1 out/stills/frame-840.png --frame=840 && npx remotion still Episode1 out/stills/frame-1020.png --frame=1020 && npx remotion still Episode1 out/stills/frame-1550.png --frame=1550"
   },
   "allowScripts": {
     "esbuild": false

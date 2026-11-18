@@ -1,1492 +1,1223 @@
 import { useId } from "react";
-import { useCurrentFrame } from "remotion";
+import { spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { COLORS } from "../theme";
 
 /**
- * ExplorerAvatar — cinematic waist-up portrait of the series lead.
+ * ExplorerAvatar — hand-inked graphic-novel character.
  *
- * Stylized comic / modern-anime rendering built from layered SVG:
- *  - 7.5-head adult proportions, broad shoulders, articulated neck and hands
- *  - cel-shaded South Asian face: jawline, cheekbones, nose bridge, stubble,
- *    almond eyes with iris gradients and highlights
- *  - layered hoodie fabric with folds, seams, drawstrings and rim light
- *  - pose-specific staging (crossed arms, backpack strap, holo-keyboard,
- *    hand-to-forehead, relaxed profile)
- *  - frame-driven breathing, blinks every ~90 frames, micro head movement and
- *    jaw/lip interpolation for lip-sync
+ * Everything anatomical (silhouettes, hair locks, collar folds, limbs, hands)
+ * is built from tapered cubic/quadratic Bezier ribbons and closed paths with
+ * round caps/joins. No rect primitives, no floating thumbs, no beard patches:
+ * the jaw is suggested by a single soft stroke.
+ *
+ * Cel shading uses hard-stop linear gradients (two-tone), and rim light is
+ * painted with gradient strokes instead of blur filters, so swangle stays fast.
  */
 
-export type AvatarPose =
-  | "standing"
-  | "walking_train"
-  | "coding"
-  | "stressed_desk"
-  | "together";
+export type AvatarCameraAngle =
+  | "back_walk"
+  | "side_profile"
+  | "hands_closeup"
+  | "chest_up_3_4"
+  | "front_centered";
 
-export type AvatarExpression = "intense" | "determined" | "hurt" | "hopeful";
+export type AvatarOutfit = "school_uniform" | "travel_backpack" | "tech_hoodie";
+
+export type AvatarExpression = "neutral" | "determined" | "hurt";
 
 export type ExplorerAvatarProps = {
-  pose: AvatarPose;
-  expression: AvatarExpression;
-  isSpeaking: boolean;
+  cameraAngle: AvatarCameraAngle;
+  outfit?: AvatarOutfit;
+  expression?: AvatarExpression;
+  /** Rim-light colour. Cyan by default, amber in the doorway, crimson at the gate. */
+  rim?: string;
+  style?: React.CSSProperties;
 };
 
-export const AVATAR_VIEWBOX = { width: 720, height: 760 } as const;
+const INK = "#080A0F";
 
 type Pt = { x: number; y: number };
 
-const CX = 360;
-const EYE_Y = 194;
-const EYE_L = 318;
-const EYE_R = 402;
-
 const n = (value: number) => Math.round(value * 10) / 10;
 
-const limb = (a: Pt, b: Pt, wA: number, wB: number, bow = 0) => {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const len = Math.hypot(dx, dy) || 1;
-  const nx = -dy / len;
-  const ny = dx / len;
-  const mx = (a.x + b.x) / 2 + nx * bow;
-  const my = (a.y + b.y) / 2 + ny * bow;
-  return [
-    `M${n(a.x + nx * wA * 0.5)} ${n(a.y + ny * wA * 0.5)}`,
-    `Q${n(mx + nx * wA * 0.42)} ${n(my + ny * wA * 0.42)} ${n(b.x + nx * wB * 0.5)} ${n(b.y + ny * wB * 0.5)}`,
-    `L${n(b.x - nx * wB * 0.5)} ${n(b.y - ny * wB * 0.5)}`,
-    `Q${n(mx - nx * wB * 0.42)} ${n(my - ny * wB * 0.42)} ${n(a.x - nx * wA * 0.5)} ${n(a.y - ny * wA * 0.5)}`,
-    "Z",
-  ].join(" ");
+/**
+ * A tapered ribbon through anchor points, using Catmull-Rom control points.
+ * Both edges are real cubic Beziers, so limbs and hair locks read as ink.
+ */
+export const ribbon = (points: Pt[], widths: number[]): string => {
+  if (points.length < 2) return "";
+  const tangents = points.map((_, i) => {
+    const prev = points[Math.max(0, i - 1)];
+    const next = points[Math.min(points.length - 1, i + 1)];
+    return { x: next.x - prev.x, y: next.y - prev.y };
+  });
+  const outer: Pt[] = [];
+  const inner: Pt[] = [];
+  points.forEach((p, i) => {
+    const len = Math.hypot(tangents[i].x, tangents[i].y) || 1;
+    const nx = -tangents[i].y / len;
+    const ny = tangents[i].x / len;
+    const w = widths[i] / 2;
+    outer.push({ x: p.x + nx * w, y: p.y + ny * w });
+    inner.push({ x: p.x - nx * w, y: p.y - ny * w });
+  });
+
+  const curve = (pts: Pt[]) => {
+    let d = `M${n(pts[0].x)} ${n(pts[0].y)}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[Math.max(0, i - 1)];
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const p3 = pts[Math.min(pts.length - 1, i + 2)];
+      const c1 = { x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6 };
+      const c2 = { x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6 };
+      d += ` C${n(c1.x)} ${n(c1.y)} ${n(c2.x)} ${n(c2.y)} ${n(p2.x)} ${n(p2.y)}`;
+    }
+    return d;
+  };
+
+  const back = [...inner].reverse();
+  return `${curve(outer)} L${n(back[0].x)} ${n(back[0].y)} ${curve(back).slice(1)} Z`;
 };
 
-type FaceConfig = {
-  browOuterY: number;
-  browInnerY: number;
-  browLift: number;
-  eyeOpen: number;
-  cornerY: number;
-  centerY: number;
-  lipFull: number;
-  nostril: number;
-};
-
-const FACE: Record<AvatarExpression, FaceConfig> = {
-  intense: {
-    browOuterY: 160,
-    browInnerY: 175,
-    browLift: 0,
-    eyeOpen: 0.8,
-    cornerY: 263,
-    centerY: 262,
-    lipFull: 0.9,
-    nostril: 1,
+const PALETTE: Record<
+  AvatarOutfit,
+  {
+    coat: string;
+    coatLight: string;
+    coatDeep: string;
+    shirt: string;
+    shirtShade: string;
+    trim: string;
+    pants: string;
+  }
+> = {
+  school_uniform: {
+    coat: "#171B25",
+    coatLight: "#2A3040",
+    coatDeep: "#0C0F16",
+    shirt: "#EEF3FA",
+    shirtShade: "#C3CEDD",
+    trim: "#00F0FF",
+    pants: "#10131B",
   },
-  determined: {
-    browOuterY: 158,
-    browInnerY: 169,
-    browLift: 0,
-    eyeOpen: 1,
-    cornerY: 259,
-    centerY: 262,
-    lipFull: 1,
-    nostril: 0.9,
+  travel_backpack: {
+    coat: "#242C26",
+    coatLight: "#3A463B",
+    coatDeep: "#12160F",
+    shirt: "#DCE4D7",
+    shirtShade: "#AFB8A5",
+    trim: "#FFB800",
+    pants: "#171A14",
   },
-  hurt: {
-    browOuterY: 167,
-    browInnerY: 157,
-    browLift: 0,
-    eyeOpen: 0.72,
-    cornerY: 267,
-    centerY: 259,
-    lipFull: 0.9,
-    nostril: 0.7,
-  },
-  hopeful: {
-    browOuterY: 155,
-    browInnerY: 152,
-    browLift: 1,
-    eyeOpen: 1.06,
-    cornerY: 253,
-    centerY: 264,
-    lipFull: 1.1,
-    nostril: 0.8,
-  },
-};
-
-type PoseScene = {
-  bodySkew: number;
-  headTilt: number;
-  headX: number;
-  headY: number;
-  eyeShiftX: number;
-  eyeShiftY: number;
-  breathAmp: number;
-  wind: number;
-};
-
-const POSE: Record<AvatarPose, PoseScene> = {
-  standing: {
-    bodySkew: -1.4,
-    headTilt: -2.2,
-    headX: -2,
-    headY: 0,
-    eyeShiftX: 3.2,
-    eyeShiftY: 0,
-    breathAmp: 2.4,
-    wind: 0.15,
-  },
-  walking_train: {
-    bodySkew: 3.4,
-    headTilt: -7,
-    headX: -7,
-    headY: 1,
-    eyeShiftX: -5,
-    eyeShiftY: 0.5,
-    breathAmp: 1.8,
-    wind: 1,
-  },
-  coding: {
-    bodySkew: 1.2,
-    headTilt: 4.5,
-    headX: -2,
-    headY: 13,
-    eyeShiftX: 0,
-    eyeShiftY: 2.6,
-    breathAmp: 1.4,
-    wind: 0,
-  },
-  stressed_desk: {
-    bodySkew: 1,
-    headTilt: -7,
-    headX: -2,
-    headY: 9,
-    eyeShiftX: -1,
-    eyeShiftY: 3.4,
-    breathAmp: 1.6,
-    wind: 0,
-  },
-  together: {
-    bodySkew: 0.8,
-    headTilt: 6.5,
-    headX: 4,
-    headY: 0,
-    eyeShiftX: 4.4,
-    eyeShiftY: -0.4,
-    breathAmp: 2,
-    wind: 0.25,
+  tech_hoodie: {
+    coat: "#0E1117",
+    coatLight: "#1E2531",
+    coatDeep: "#06080C",
+    shirt: "#131720",
+    shirtShade: "#0B0E14",
+    trim: "#00F0FF",
+    pants: "#0A0D13",
   },
 };
 
-const finger = (
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  rot: number,
-  skin: string,
-  line: string,
-) => (
-  <g transform={`rotate(${rot} ${x + width / 2} ${y})`}>
-    <rect
-      x={x}
-      y={y}
-      width={width}
-      height={height}
-      rx={width / 2}
-      fill={`url(#${skin})`}
-      stroke={line}
-      strokeWidth="1.3"
-      strokeOpacity="0.5"
+const EXPR: Record<
+  AvatarExpression,
+  { browLift: number; browTilt: number; eyeOpen: number; mouth: number; jaw: number }
+> = {
+  neutral: { browLift: 0, browTilt: 0, eyeOpen: 1, mouth: 0, jaw: 0 },
+  determined: { browLift: -4, browTilt: 5, eyeOpen: 0.86, mouth: -2, jaw: 3 },
+  hurt: { browLift: -1, browTilt: -6, eyeOpen: 0.72, mouth: 4, jaw: -2 },
+};
+
+const blinkAmount = (frame: number, offset: number) => {
+  const t = (frame + offset) % 90;
+  if (t < 84) return 0;
+  return Math.sin(((t - 84) / 6) * Math.PI) * 0.94;
+};
+
+const useMicroMotion = () => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const enter = spring({ frame, fps, config: { damping: 200, stiffness: 120, mass: 0.9 } });
+  return {
+    frame,
+    enter,
+    breathe: Math.sin(frame / 38) * 2.2,
+    headSway: Math.sin(frame / 52 + 0.7) * 1.15,
+    bobY: Math.sin(frame / 44) * 1.6,
+  };
+};
+
+type GradientProps = { id: string; palette: (typeof PALETTE)[AvatarOutfit]; rim: string };
+
+const Defs: React.FC<GradientProps> = ({ id, palette, rim }) => (
+  <defs>
+    {/* Cel-shaded skin: hard two-tone break at 52%. */}
+    <linearGradient id={`${id}-skin`} x1="0" y1="0.1" x2="1" y2="0.9">
+      <stop offset="0%" stopColor="#EDBD95" />
+      <stop offset="30%" stopColor="#DC9F76" />
+      <stop offset="52%" stopColor="#C58A60" />
+      <stop offset="52.4%" stopColor="#A76F4A" />
+      <stop offset="82%" stopColor="#8C5A39" />
+      <stop offset="100%" stopColor="#71452B" />
+    </linearGradient>
+    <linearGradient id={`${id}-skinSoft`} x1="0" y1="0" x2="0.7" y2="1">
+      <stop offset="0%" stopColor="#F3C69D" />
+      <stop offset="60%" stopColor="#D79B71" />
+      <stop offset="100%" stopColor="#A46C47" />
+    </linearGradient>
+    <linearGradient id={`${id}-hair`} x1="0" y1="0" x2="0.9" y2="1">
+      <stop offset="0%" stopColor="#2C3446" />
+      <stop offset="34%" stopColor="#171C27" />
+      <stop offset="62%" stopColor="#0D1119" />
+      <stop offset="63%" stopColor="#0A0D13" />
+      <stop offset="100%" stopColor="#05070B" />
+    </linearGradient>
+    <linearGradient id={`${id}-coat`} gradientUnits="userSpaceOnUse" x1="190" y1="330" x2="540" y2="700">
+      <stop offset="0%" stopColor={palette.coatLight} />
+      <stop offset="36%" stopColor={palette.coat} />
+      <stop offset="72%" stopColor={palette.coat} />
+      <stop offset="72.5%" stopColor={palette.coatDeep} />
+      <stop offset="100%" stopColor="#05070A" />
+    </linearGradient>
+    <linearGradient id={`${id}-shirt`} x1="0" y1="0" x2="1" y2="0.8">
+      <stop offset="0%" stopColor="#FFFFFF" />
+      <stop offset="46%" stopColor={palette.shirt} />
+      <stop offset="46.5%" stopColor={palette.shirtShade} />
+      <stop offset="100%" stopColor={palette.shirtShade} />
+    </linearGradient>
+    <linearGradient id={`${id}-rim`} x1="0" y1="0" x2="1" y2="0.2">
+      <stop offset="0%" stopColor={rim} stopOpacity="0.95" />
+      <stop offset="55%" stopColor={rim} stopOpacity="0.35" />
+      <stop offset="100%" stopColor={rim} stopOpacity="0" />
+    </linearGradient>
+    <linearGradient id={`${id}-rimV`} x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stopColor={rim} stopOpacity="0.8" />
+      <stop offset="70%" stopColor={rim} stopOpacity="0.18" />
+      <stop offset="100%" stopColor={rim} stopOpacity="0" />
+    </linearGradient>
+    <radialGradient id={`${id}-eye`} cx="0.4" cy="0.32" r="0.8">
+      <stop offset="0%" stopColor="#3B2A20" />
+      <stop offset="42%" stopColor="#1C1712" />
+      <stop offset="100%" stopColor="#0A0908" />
+    </radialGradient>
+  </defs>
+);
+
+type EyeProps = {
+  id: string;
+  x: number;
+  y: number;
+  open: number;
+  tilt: number;
+  flip?: boolean;
+};
+
+const AlmondEye: React.FC<EyeProps> = ({ id, x, y, open, tilt }) => {
+  const h = 15.5 * open;
+  const clip = `${id}-clip-${Math.round(x)}`;
+  return (
+    <g transform={`rotate(${tilt} ${x} ${y})`}>
+      <clipPath id={clip}>
+        <path
+          d={`M${x - 31} ${y + 1} C${x - 15} ${y - h} ${x + 15} ${y - h} ${x + 31} ${y} C${x + 13} ${y + h * 0.86} ${x - 15} ${y + h * 0.8} ${x - 31} ${y + 1} Z`}
+        />
+      </clipPath>
+      <g clipPath={`url(#${clip})`}>
+        <path
+          d={`M${x - 32} ${y - 26} L${x + 32} ${y - 26} L${x + 32} ${y + 26} L${x - 32} ${y + 26} Z`}
+          fill="#F4E7DC"
+        />
+        <ellipse cx={x + 1} cy={y + 2} rx={10.6} ry={12.6} fill={`url(#${id}-eye)`} />
+        <ellipse cx={x + 1} cy={y + 2} rx={5.4} ry={6.6} fill="#070707" />
+        <circle cx={x + 5} cy={y - 3.5} r={3.6} fill="#FFFFFF" opacity={0.96} />
+        <circle cx={x - 4} cy={y + 7} r={2.1} fill="#8FE9F2" opacity={0.6} />
+        <path d={`M${x - 32} ${y - 26} L${x + 32} ${y - 26} L${x + 32} ${y - 10} C${x + 6} ${y - 18} ${x - 10} ${y - 16} ${x - 32} ${y - 7} Z`} fill="#3A2418" opacity={0.28} />
+      </g>
+      {/* upper lash — heavy ink line */}
+      <path
+        d={`M${x - 33} ${y + 1} C${x - 16} ${y - h - 2} ${x + 16} ${y - h - 2} ${x + 33} ${y - 1}`}
+        stroke={INK}
+        strokeWidth={5.4}
+        strokeLinecap="round"
+        fill="none"
+      />
+      <path
+        d={`M${x + 14} ${y - h * 0.72} C${x + 23} ${y - h * 0.58} ${x + 29} ${y - h * 0.3} ${x + 33} ${y - 2}`}
+        stroke={INK}
+        strokeWidth={2.6}
+        strokeLinecap="round"
+        fill="none"
+      />
+      <path
+        d={`M${x + 30} ${y + 1} l7 -4`}
+        stroke={INK}
+        strokeWidth={3}
+        strokeLinecap="round"
+      />
+      <path
+        d={`M${x - 26} ${y + h * 0.78} C${x - 10} ${y + h * 0.98} ${x + 10} ${y + h * 0.92} ${x + 24} ${y + h * 0.6}`}
+        stroke={INK}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+        fill="none"
+        opacity={0.7}
+      />
+    </g>
+  );
+};
+
+type FaceProps = {
+  id: string;
+  frame: number;
+  expression: AvatarExpression;
+  threeQuarter?: boolean;
+};
+
+/** Front / three-quarter chest-up head. */
+const Face: React.FC<FaceProps> = ({ id, frame, expression, threeQuarter }) => {
+  const ex = EXPR[expression];
+  const blink = blinkAmount(frame, threeQuarter ? 22 : 6);
+  const open = Math.max(0.06, ex.eyeOpen * (1 - blink));
+  const fx = threeQuarter ? -14 : 0;
+  return (
+    <g transform={`translate(${fx} 0)`}>
+      {/* ears */}
+      <path
+        d="M262 190 C244 180 236 200 240 220 C244 242 256 254 270 250 C264 232 262 210 262 190 Z"
+        fill={`url(#${id}-skinSoft)`}
+        stroke={INK}
+        strokeWidth={3}
+        strokeLinejoin="round"
+      />
+      <path
+        d="M458 190 C476 180 484 200 480 220 C476 242 464 254 450 250 C456 232 458 210 458 190 Z"
+        fill={`url(#${id}-skinSoft)`}
+        stroke={INK}
+        strokeWidth={3}
+        strokeLinejoin="round"
+      />
+      {/* neck, trapezius */}
+      <path
+        d="M316 286 L314 344 C313 362 300 374 282 382 L438 382 C420 374 407 362 406 344 L404 286 C382 306 338 306 316 286 Z"
+        fill={`url(#${id}-skin)`}
+        stroke={INK}
+        strokeWidth={3.4}
+        strokeLinejoin="round"
+      />
+      <path
+        d="M316 300 C330 322 390 322 404 300 L404 330 C388 348 332 348 316 330 Z"
+        fill="#7E4C30"
+        opacity={0.32}
+      />
+      {/* skull */}
+      <path
+        d="M360 74 C298 74 264 120 262 176 C260 216 268 248 288 272 C308 298 334 314 360 316 C386 314 412 298 432 272 C452 248 460 216 458 176 C456 120 422 74 360 74 Z"
+        fill={`url(#${id}-skin)`}
+        stroke={INK}
+        strokeWidth={4}
+        strokeLinejoin="round"
+      />
+      {/* cheekbone + temple cel shading */}
+      <path
+        d="M434 196 C444 224 438 254 424 274 C410 294 388 308 366 314 C394 292 410 262 414 230 C416 214 422 204 434 196 Z"
+        fill="#8A5738"
+        opacity={0.34}
+      />
+      <path
+        d="M292 202 C286 226 288 246 296 262 C282 250 274 226 276 204 Z"
+        fill="#F0C39A"
+        opacity={0.28}
+      />
+      {/* brow shadow band */}
+      <path
+        d="M288 160 C308 140 338 136 352 150 C330 150 306 160 294 174 Z"
+        fill="#8C5A3B"
+        opacity={0.18}
+      />
+      {/* eyebrows — brush strokes */}
+      <path
+        d={`M${288} ${172 + ex.browLift} C302 ${160 + ex.browLift - ex.browTilt} 326 ${157 + ex.browLift - ex.browTilt} 342 ${166 + ex.browLift}`}
+        stroke="#12151C"
+        strokeWidth={7.6}
+        strokeLinecap="round"
+        fill="none"
+      />
+      <path
+        d={`M${432} ${172 + ex.browLift} C418 ${160 + ex.browLift - ex.browTilt} 394 ${157 + ex.browLift - ex.browTilt} 378 ${166 + ex.browLift}`}
+        stroke="#12151C"
+        strokeWidth={7.6}
+        strokeLinecap="round"
+        fill="none"
+      />
+      {/* eyes */}
+      <AlmondEye id={id} x={312} y={206} open={open} tilt={-2} />
+      <AlmondEye id={id} x={408} y={206} open={open} tilt={2} />
+      {/* nose bridge + tip */}
+      <path
+        d="M360 196 C355 216 352 232 350 244"
+        stroke="#8A5738"
+        strokeWidth={2.6}
+        strokeLinecap="round"
+        opacity={0.5}
+        fill="none"
+      />
+      <path
+        d="M341 244 C349 251 357 253 365 248"
+        stroke={INK}
+        strokeWidth={3}
+        strokeLinecap="round"
+        fill="none"
+      />
+      <path
+        d="M340 245 C336 250 336 254 340 257"
+        stroke="#6E4128"
+        strokeWidth={2.4}
+        strokeLinecap="round"
+        fill="none"
+        opacity={0.75}
+      />
+      <path
+        d="M378 246 C382 251 382 255 378 258"
+        stroke="#6E4128"
+        strokeWidth={2.4}
+        strokeLinecap="round"
+        fill="none"
+        opacity={0.75}
+      />
+      {/* mouth — one clean line, no heavy upper-lip shadow */}
+      <path
+        d={`M332 ${282 + ex.mouth} C344 ${277 + ex.mouth} 354 ${277 + ex.mouth} 360 ${281 + ex.mouth} C366 ${277 + ex.mouth} 376 ${277 + ex.mouth} 388 ${282 + ex.mouth}`}
+        stroke="#6E4130"
+        strokeWidth={2.2}
+        strokeLinecap="round"
+        fill="none"
+      />
+      <path
+        d={`M342 ${290 + ex.mouth} C352 ${295 + ex.mouth} 368 ${295 + ex.mouth} 378 ${290 + ex.mouth}`}
+        stroke="#D99A86"
+        strokeWidth={2}
+        strokeLinecap="round"
+        fill="none"
+        opacity={0.35}
+      />
+      {/* single-stroke jaw shadow — no beard patch */}
+      <path
+        d="M296 250 C304 284 330 310 362 316"
+        stroke="#6B3F28"
+        strokeWidth={7}
+        strokeLinecap="round"
+        fill="none"
+        opacity={0.09}
+      />
+      {/* hair: cap, part, windswept locks */}
+      <path
+        d="M360 52 C300 52 262 96 258 156 C256 172 258 186 262 198 C258 168 268 146 282 140 C280 118 296 104 314 112 C322 92 344 86 360 100 C376 86 400 90 408 110 C428 102 444 118 442 140 C458 150 466 170 460 198 C466 184 468 166 464 150 C460 96 424 52 360 52 Z"
+        fill={`url(#${id}-hair)`}
+        stroke={INK}
+        strokeWidth={3.4}
+        strokeLinejoin="round"
+      />
+      <path
+        d="M300 118 C284 140 278 170 282 200 C286 226 296 248 306 258 C298 232 294 204 296 178 C298 152 306 132 318 120 Z"
+        fill="#1A2030"
+        opacity={0.85}
+      />
+      <path
+        d={ribbon(
+          [
+            { x: 380, y: 92 },
+            { x: 404, y: 118 },
+            { x: 430, y: 150 },
+            { x: 438, y: 186 },
+          ],
+          [34, 26, 14, 3],
+        )}
+        fill={`url(#${id}-hair)`}
+        stroke={INK}
+        strokeWidth={2.4}
+      />
+      <path
+        d={ribbon(
+          [
+            { x: 350, y: 96 },
+            { x: 372, y: 120 },
+            { x: 392, y: 154 },
+            { x: 386, y: 186 },
+          ],
+          [26, 20, 11, 2],
+        )}
+        fill="#1C2331"
+        stroke={INK}
+        strokeWidth={2}
+      />
+      <path
+        d={ribbon(
+          [
+            { x: 326, y: 108 },
+            { x: 300, y: 132 },
+            { x: 292, y: 164 },
+            { x: 298, y: 194 },
+          ],
+          [22, 16, 9, 2],
+        )}
+        fill="#161C28"
+        stroke={INK}
+        strokeWidth={2}
+      />
+      <path
+        d={ribbon(
+          [
+            { x: 412, y: 104 },
+            { x: 438, y: 126 },
+            { x: 454, y: 164 },
+            { x: 446, y: 206 },
+          ],
+          [20, 15, 8, 2],
+        )}
+        fill="#101520"
+        stroke={INK}
+        strokeWidth={2}
+      />
+      {/* temple strands over the forehead */}
+      <path
+        d={ribbon(
+          [
+            { x: 332, y: 132 },
+            { x: 312, y: 148 },
+            { x: 300, y: 170 },
+          ],
+          [14, 8, 1.5],
+        )}
+        fill="#121722"
+      />
+      <path
+        d={ribbon(
+          [
+            { x: 396, y: 128 },
+            { x: 416, y: 144 },
+            { x: 424, y: 168 },
+          ],
+          [12, 7, 1.5],
+        )}
+        fill="#121722"
+      />
+      {/* rim light along the crown / cheek */}
+      <path
+        d="M262 168 C264 132 276 104 296 86"
+        stroke={`url(#${id}-rim)`}
+        strokeWidth={6}
+        strokeLinecap="round"
+        fill="none"
+      />
+      <path
+        d="M452 210 C456 238 446 266 428 286"
+        stroke={`url(#${id}-rimV)`}
+        strokeWidth={4.4}
+        strokeLinecap="round"
+        fill="none"
+      />
+    </g>
+  );
+};
+
+const ChestBody: React.FC<{
+  id: string;
+  palette: (typeof PALETTE)[AvatarOutfit];
+  outfit: AvatarOutfit;
+  rim: string;
+}> = ({ id, palette, outfit, rim }) => (
+  <g>
+    {/* torso */}
+    <path
+      d="M300 322 C252 334 214 358 198 400 C182 444 174 512 172 594 L172 760 L548 760 L548 594 C546 512 538 444 522 400 C506 358 468 334 420 322 C408 344 384 356 360 356 C336 356 312 344 300 322 Z"
+      fill={`url(#${id}-coat)`}
+      stroke={INK}
+      strokeWidth={4}
+      strokeLinejoin="round"
+    />
+
+    {/* open shirt front, visible through the jacket */}
+    {outfit === "school_uniform" ? (
+      <g>
+        <path
+          d="M318 344 C326 392 342 430 360 456 C378 430 394 392 402 344 L410 760 L310 760 Z"
+          fill={`url(#${id}-shirt)`}
+          stroke={INK}
+          strokeWidth={3}
+          strokeLinejoin="round"
+        />
+        <path d="M360 456 L360 760" stroke="#A7B4C6" strokeWidth={2.6} />
+        {[520, 604, 688].map((y) => (
+          <circle key={y} cx={360} cy={y} r={9} fill="#E8EEF6" stroke="#8E9AAE" strokeWidth={2.2} />
+        ))}
+        <path d="M320 340 L360 402 L334 424 L298 366 Z" fill="#FFFFFF" stroke={INK} strokeWidth={2.8} strokeLinejoin="round" />
+        <path d="M400 340 L360 402 L386 424 L422 366 Z" fill={palette.shirt} stroke={INK} strokeWidth={2.8} strokeLinejoin="round" />
+        <path d="M320 340 L360 402" stroke={palette.trim} strokeWidth={3} strokeLinecap="round" opacity={0.5} />
+        <path d="M322 342 C338 360 382 360 398 342" stroke="#8E9AAE" strokeWidth={2.2} fill="none" opacity={0.8} />
+        {/* jacket lapels folded back over the shirt */}
+        <path
+          d="M306 324 C296 370 298 420 316 464 L344 442 C328 408 322 366 326 336 Z"
+          fill={palette.coatLight}
+          stroke={INK}
+          strokeWidth={2.6}
+          strokeLinejoin="round"
+        />
+        <path
+          d="M414 324 C424 370 422 420 404 464 L376 442 C392 408 398 366 394 336 Z"
+          fill={palette.coatLight}
+          stroke={INK}
+          strokeWidth={2.6}
+          strokeLinejoin="round"
+        />
+        <path d="M310 344 C302 386 304 424 318 456" stroke={palette.trim} strokeWidth={2.4} strokeLinecap="round" fill="none" opacity={0.45} />
+      </g>
+    ) : null}
+
+    {/* sleeves, inked off the torso */}
+    <path
+      d="M206 396 C188 444 178 512 176 594 L176 760 L262 760 C254 640 238 520 246 412 Z"
+      fill={palette.coatDeep}
+      stroke={INK}
+      strokeWidth={3.4}
+      strokeLinejoin="round"
     />
     <path
-      d={`M${x + 2} ${y + height * 0.52} Q${x + width / 2} ${y + height * 0.62} ${x + width - 2} ${y + height * 0.52}`}
-      stroke={line}
-      strokeWidth="1.1"
-      fill="none"
-      opacity="0.4"
+      d="M514 396 C532 444 542 512 544 594 L544 760 L458 760 C466 640 482 520 474 412 Z"
+      fill={palette.coatDeep}
+      stroke={INK}
+      strokeWidth={3.4}
+      strokeLinejoin="round"
     />
+    <path d="M238 470 C230 530 226 600 228 664" stroke="#05070B" strokeWidth={2.2} opacity={0.5} fill="none" />
+    <path d="M482 470 C490 530 494 600 492 664" stroke="#05070B" strokeWidth={2.2} opacity={0.35} fill="none" />
+
+    {/* hoodie hood + drawstrings */}
+    {outfit === "tech_hoodie" ? (
+      <g>
+        <path
+          d="M306 326 C292 362 294 400 312 424 C330 444 390 444 408 424 C426 400 428 362 414 326 C402 350 382 362 360 362 C338 362 318 350 306 326 Z"
+          fill={palette.coatLight}
+          stroke={INK}
+          strokeWidth={3.2}
+          strokeLinejoin="round"
+        />
+        <path d="M340 410 C338 470 336 520 340 566" stroke={palette.trim} strokeWidth={4} strokeLinecap="round" fill="none" opacity={0.85} />
+        <path d="M380 410 C382 470 384 520 380 566" stroke={palette.trim} strokeWidth={4} strokeLinecap="round" fill="none" opacity={0.55} />
+        <circle cx={340} cy={572} r={5.5} fill={palette.trim} opacity={0.9} />
+        <circle cx={380} cy={572} r={5.5} fill={palette.trim} opacity={0.6} />
+        <path d="M306 404 C318 420 348 430 360 430" stroke={rim} strokeWidth={2.6} fill="none" opacity={0.4} strokeLinecap="round" />
+      </g>
+    ) : null}
+
+    {/* backpack straps */}
+    {outfit === "travel_backpack" ? (
+      <g>
+        <path
+          d="M300 320 C286 380 288 470 300 560 L336 552 C326 466 326 382 338 336 Z"
+          fill="#7A5A2E"
+          stroke={INK}
+          strokeWidth={3}
+          strokeLinejoin="round"
+        />
+        <path
+          d="M420 320 C436 380 434 470 422 560 L386 552 C396 466 396 382 382 336 Z"
+          fill="#6B4E27"
+          stroke={INK}
+          strokeWidth={3}
+          strokeLinejoin="round"
+        />
+        <path d="M306 400 L332 396 M310 430 L334 426" stroke="#FFB800" strokeWidth={3} strokeLinecap="round" opacity={0.7} />
+        <path d="M414 400 L388 396 M410 430 L386 426" stroke="#FFB800" strokeWidth={3} strokeLinecap="round" opacity={0.5} />
+      </g>
+    ) : null}
+
+    {/* folds and seams */}
+    <path d="M206 700 C280 716 440 716 514 700" stroke="#05070B" strokeWidth={3} fill="none" opacity={0.4} />
+    <path d="M240 470 C252 512 252 560 244 606" stroke="#05070B" strokeWidth={2} fill="none" opacity={0.32} />
+    <path d="M480 470 C468 512 468 560 476 606" stroke="#05070B" strokeWidth={2} fill="none" opacity={0.32} />
+    <path d="M300 322 C282 366 280 416 296 470" stroke="#05070B" strokeWidth={2.4} fill="none" opacity={0.45} />
+    <path d="M420 322 C438 366 440 416 424 470" stroke="#05070B" strokeWidth={2.4} fill="none" opacity={0.3} />
+
+    {/* rim light */}
+    <path
+      d="M300 322 C252 334 214 358 198 400 C182 444 174 512 172 594"
+      stroke={`url(#${id}-rim)`}
+      strokeWidth={6}
+      strokeLinecap="round"
+      fill="none"
+      opacity={0.9}
+    />
+    <path d="M420 322 C468 334 506 358 522 400" stroke={rim} strokeWidth={2.8} strokeLinecap="round" fill="none" opacity={0.35} />
   </g>
 );
 
-export const ExplorerAvatar: React.FC<ExplorerAvatarProps> = ({
-  pose,
-  expression,
-  isSpeaking,
-}) => {
-  const frame = useCurrentFrame();
-  const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
-  const id = (name: string) => `${name}-${uid}`;
+type FullBodyProps = {
+  id: string;
+  palette: (typeof PALETTE)[AvatarOutfit];
+  outfit: AvatarOutfit;
+  frame: number;
+  rim: string;
+  profile?: boolean;
+};
 
-  const scene = POSE[pose];
-  const face = FACE[expression];
+/** Full-body back view, walking away, with hip/shoulder counter-rotation. */
+const FullBodyBack: React.FC<FullBodyProps> = ({ id, palette, outfit, frame, rim }) => {
+  const stride = Math.sin(frame * 0.22);
+  const bob = Math.abs(Math.cos(frame * 0.22)) * 3.4;
+  const hem = Math.sin(frame * 0.22 + 0.9) * 8;
+  const shoulderRot = stride * 2.4;
+  const hipRot = -stride * 3.1;
 
-  /* ── life ─────────────────────────────────────────────────────────── */
-  const breath = Math.sin(frame * 0.052) * scene.breathAmp;
-  const microX = Math.sin(frame * 0.021 + 0.7) * 2.6;
-  const microY = Math.sin(frame * 0.017 + 1.4) * 2;
-  const microRot = Math.sin(frame * 0.013 + 0.3) * 0.9;
-
-  const blinkPeriod = 88 + (pose.length % 5) * 4;
-  const blinkFrame = (frame + pose.length * 11) % blinkPeriod;
-  const blink = blinkFrame < 5 ? Math.sin((blinkFrame / 5) * Math.PI) : 0;
-  const eyeOpen = Math.max(0.06, face.eyeOpen * (1 - blink * 0.94));
-
-  const jaw = isSpeaking
-    ? 0.15 + 0.85 * Math.abs(Math.sin(frame * 0.62))
-    : 0.04 + 0.03 * Math.sin(frame * 0.05);
-  const wind = Math.sin(frame * 0.075) * scene.wind;
-
-  const headRot = scene.headTilt + microRot;
-  const headTranslate = `translate(${n(scene.headX + microX)} ${n(scene.headY + microY + breath * 0.4)}) rotate(${n(headRot)} ${CX} 300)`;
-
-  const lightMode =
-    pose === "stressed_desk"
-      ? "crimson"
-      : pose === "together"
-        ? "amber"
-        : "cyan";
-
-  const rimGradient =
-    lightMode === "crimson"
-      ? id("rimCrimson")
-      : lightMode === "amber"
-        ? id("rimAmber")
-        : id("rimCyan");
-
-  /* ── eyes ─────────────────────────────────────────────────────────── */
-  const eyeShiftX = scene.eyeShiftX + Math.sin(frame * 0.016 + 0.9) * 1.2;
-  const eyeShiftY = scene.eyeShiftY + Math.sin(frame * 0.011) * 0.6;
-
-  const eyePath = (side: "left" | "right") => {
-    const inner = side === "left" ? 347 : 373;
-    const outer = side === "left" ? 290 : 430;
-    const upperX = side === "left" ? 306 : 414;
-    const lowerX = side === "left" ? 330 : 390;
-    return [
-      `M${inner} ${EYE_Y}`,
-      `C${side === "left" ? 334 : 386} ${n(EYE_Y - 14 * eyeOpen)} ${upperX} ${n(EYE_Y - 18 * eyeOpen)} ${outer} ${EYE_Y}`,
-      `C${lowerX} ${n(EYE_Y + 11 * eyeOpen)} ${side === "left" ? 302 : 418} ${n(EYE_Y + 13 * eyeOpen)} ${inner} ${EYE_Y}`,
-      "Z",
-    ].join(" ");
-  };
-
-  const drawEye = (side: "left" | "right") => {
-    const cx = side === "left" ? EYE_L : EYE_R;
-    const clip = id(`eyeClip${side}`);
-    const iris = id("iris");
-    const sclera = id("sclera");
-    const cxPath = eyePath(side);
-    const upperLash = [
-      `M${side === "left" ? 347 : 373} ${EYE_Y}`,
-      `C${side === "left" ? 334 : 386} ${n(EYE_Y - 14 * eyeOpen)} ${side === "left" ? 306 : 414} ${n(EYE_Y - 18 * eyeOpen)} ${side === "left" ? 290 : 430} ${EYE_Y}`,
-    ].join(" ");
+  const leg = (side: -1 | 1, swing: number) => {
+    const hip = { x: 360 + side * 38, y: 600 };
+    const knee = { x: hip.x + swing * 18 + side * 6, y: 770 - Math.abs(swing) * 8 };
+    const ankle = { x: hip.x + swing * 46, y: 912 - Math.max(0, swing) * 24 };
+    const toe = { x: ankle.x + 26 * side + swing * 8, y: ankle.y + 28 - Math.max(0, swing) * 10 };
     return (
       <g key={side}>
-        <defs>
-          <clipPath id={clip}>
-            <path d={cxPath} />
-          </clipPath>
-        </defs>
-        {/* socket + crease */}
         <path
-          d={`M${cx - 34} ${EYE_Y - 12} C${cx - 22} ${EYE_Y - 30} ${cx + 20} ${EYE_Y - 31} ${cx + 33} ${EYE_Y - 12}`}
-          stroke="#6F422C"
-          strokeWidth="10"
-          fill="none"
-          opacity="0.16"
+          d={ribbon([hip, knee, ankle, toe], [82, 62, 44, 30])}
+          fill={side === 1 ? palette.pants : "#07090D"}
+          stroke={INK}
+          strokeWidth={3.4}
+          strokeLinejoin="round"
+        />
+        <path
+          d={`M${ankle.x + 16 * side} ${ankle.y - 4} C${ankle.x + 34 * side} ${ankle.y + 6} ${ankle.x + 54 * side} ${ankle.y + 18} ${ankle.x + 44 * side} ${ankle.y + 38} C${ankle.x + 22 * side} ${ankle.y + 48} ${ankle.x - 22 * side} ${ankle.y + 46} ${ankle.x - 26 * side} ${ankle.y + 30} C${ankle.x - 26 * side} ${ankle.y + 14} ${ankle.x - 2 * side} ${ankle.y + 2} ${ankle.x + 16 * side} ${ankle.y - 4} Z`}
+          fill="#0B0E14"
+          stroke={INK}
+          strokeWidth={3}
+          strokeLinejoin="round"
+        />
+        <path
+          d={`M${ankle.x - 20 * side} ${ankle.y + 26} C${ankle.x} ${ankle.y + 34} ${ankle.x + 24 * side} ${ankle.y + 34} ${ankle.x + 42 * side} ${ankle.y + 20}`}
+          stroke={side === 1 ? rim : "#2A3242"}
+          strokeWidth={3.2}
           strokeLinecap="round"
-        />
-        <g transform={`translate(0 ${EYE_Y}) scale(1 ${1 - blink * 0.9}) translate(0 ${-EYE_Y})`}>
-          <path d={cxPath} fill={`url(#${sclera})`} />
-          <g clipPath={`url(#${clip})`}>
-            <circle
-              cx={cx + eyeShiftX}
-              cy={EYE_Y + eyeShiftY}
-              r="15"
-              fill={`url(#${iris})`}
-            />
-            <circle
-              cx={cx + eyeShiftX}
-              cy={EYE_Y + eyeShiftY}
-              r="15"
-              fill="none"
-              stroke="#1A0E09"
-              strokeWidth="2.2"
-              opacity="0.9"
-            />
-            <circle
-              cx={cx + eyeShiftX}
-              cy={EYE_Y + eyeShiftY}
-              r="6.4"
-              fill="#080506"
-            />
-            <circle
-              cx={cx + eyeShiftX - 5.2}
-              cy={EYE_Y + eyeShiftY - 5.4}
-              r="4"
-              fill="#FFF8F0"
-              opacity="0.95"
-            />
-            <circle
-              cx={cx + eyeShiftX + 5}
-              cy={EYE_Y + eyeShiftY + 4.4}
-              r="2.1"
-              fill={COLORS.cyan}
-              opacity="0.9"
-            />
-            <path
-              d={`M${cx - 18} ${EYE_Y - 12} Q${cx} ${EYE_Y - 20} ${cx + 18} ${EYE_Y - 12}`}
-              stroke="#2A1A12"
-              strokeWidth="4"
-              opacity="0.18"
-              fill="none"
-            />
-          </g>
-        </g>
-        {/* upper lash line + wing */}
-        <path
-          d={upperLash}
-          stroke="#120E10"
-          strokeWidth="5.4"
           fill="none"
+          opacity={0.85}
+        />
+        <path
+          d={`M${knee.x - 20} ${knee.y - 2} C${knee.x - 6} ${knee.y + 10} ${knee.x + 8} ${knee.y + 10} ${knee.x + 22} ${knee.y - 4}`}
+          stroke="#05070B"
+          strokeWidth={3}
           strokeLinecap="round"
+          fill="none"
+          opacity={0.7}
         />
         <path
-          d={`M${side === "left" ? 292 : 428} ${EYE_Y - 1} L${side === "left" ? 282 : 438} ${EYE_Y - 7}`}
-          stroke="#120E10"
-          strokeWidth="3.4"
+          d={`M${hip.x - 22} ${hip.y + 40} C${hip.x - 8} ${hip.y + 52} ${knee.x} ${knee.y - 24} ${knee.x + 12} ${knee.y - 30}`}
+          stroke="#05070B"
+          strokeWidth={2.2}
           strokeLinecap="round"
-        />
-        {/* lower lid light */}
-        <path
-          d={`M${cx - 28} ${EYE_Y + 9} Q${cx} ${EYE_Y + 17} ${cx + 28} ${EYE_Y + 9}`}
-          stroke="#F0C39A"
-          strokeWidth="1.8"
           fill="none"
-          opacity="0.5"
-        />
-        {/* crease */}
-        <path
-          d={`M${cx - 30} ${EYE_Y - 18} Q${cx} ${EYE_Y - 30} ${cx + 28} ${EYE_Y - 17}`}
-          stroke="#855034"
-          strokeWidth="2.4"
-          fill="none"
-          opacity="0.55"
-        />
-        <path
-          d={`M${side === "left" ? 296 : 424} ${EYE_Y - 8} Q${side === "left" ? 302 : 418} ${EYE_Y - 4} ${side === "left" ? 300 : 420} ${EYE_Y + 2}`}
-          stroke="#6E3F29"
-          strokeWidth="2"
-          fill="none"
-          opacity="0.55"
+          opacity={0.4}
         />
       </g>
     );
   };
 
-  /* ── brows ────────────────────────────────────────────────────────── */
-  const browLift = face.browLift * 1.5 + Math.sin(frame * 0.03) * 1.2;
-  const drawBrow = (side: "left" | "right") => {
-    const outerX = side === "left" ? 286 : 434;
-    const innerX = side === "left" ? 348 : 372;
-    const outerY = face.browOuterY - browLift;
-    const innerY = face.browInnerY - browLift;
-    const arch = side === "left" ? -7 : -7;
+  const arm = (side: -1 | 1, swing: number) => {
+    const shoulder = { x: 360 + side * 150, y: 398 };
+    const elbow = { x: 360 + side * 164 + swing * 8, y: 536 };
+    const wrist = { x: 360 + side * 152 - swing * 18, y: 668 };
+    const hand = { x: wrist.x - side * 3, y: wrist.y + 42 };
     return (
       <g key={side}>
         <path
-          d={[
-            `M${outerX} ${outerY}`,
-            `C${side === "left" ? 306 : 414} ${outerY + arch} ${side === "left" ? 330 : 390} ${innerY + arch} ${innerX} ${innerY}`,
-            `L${innerX + (side === "left" ? -2 : 2)} ${innerY + 12}`,
-            `C${side === "left" ? 328 : 392} ${innerY + 10} ${side === "left" ? 306 : 414} ${outerY + 12} ${outerX + (side === "left" ? 2 : -2)} ${outerY + 11}`,
-            "Z",
-          ].join(" ")}
-          fill={`url(#${id("hairBase")})`}
+          d={ribbon([shoulder, elbow, wrist], [58, 47, 37])}
+          fill={`url(#${id}-coat)`}
+        />
+        {/* armhole seam */}
+        {/* cuff */}
+        <path
+          d={`M${wrist.x - 22} ${wrist.y - 8} C${wrist.x - 6} ${wrist.y + 2} ${wrist.x + 12} ${wrist.y} ${wrist.x + 22} ${wrist.y - 12}`}
+          stroke={side === 1 ? rim : "#3A4354"}
+          strokeWidth={3}
+          strokeLinecap="round"
+          fill="none"
+          opacity={0.8}
         />
         <path
-          d={`M${outerX + 6} ${outerY + 4} Q${side === "left" ? 318 : 402} ${outerY + 1} ${innerX - (side === "left" ? 6 : -6)} ${innerY + 3}`}
-          stroke="#39404F"
-          strokeWidth="1.6"
+          d={ribbon([{ x: wrist.x, y: wrist.y + 2 }, { x: hand.x, y: hand.y - 6 }], [34, 24])}
+          fill={`url(#${id}-skinSoft)`}
+          stroke={INK}
+          strokeWidth={2.8}
+        />
+        <path
+          d={ribbon([{ x: wrist.x - 8, y: wrist.y + 18 }, { x: wrist.x - 4, y: wrist.y + 48 }], [11, 3])}
+          fill={`url(#${id}-skinSoft)`}
+          stroke={INK}
+          strokeWidth={2}
+        />
+        <path
+          d={`M${wrist.x - 20} ${wrist.y + 26} C${wrist.x - 6} ${wrist.y + 34} ${wrist.x + 8} ${wrist.y + 34} ${wrist.x + 20} ${wrist.y + 24}`}
+          stroke="#7A4A2E"
+          strokeWidth={1.8}
+          strokeLinecap="round"
           fill="none"
-          opacity="0.55"
+          opacity={0.5}
         />
       </g>
     );
   };
-
-  /* ── mouth ────────────────────────────────────────────────────────── */
-  const cornerY = face.cornerY + jaw * 3;
-  const centerY = face.centerY + jaw * 3;
-  const opening = 2 + jaw * 9;
-
-  /* ── hair helpers ─────────────────────────────────────────────────── */
-  const windLift = wind * 5;
 
   return (
-    <svg
-      viewBox={`0 0 ${AVATAR_VIEWBOX.width} ${AVATAR_VIEWBOX.height}`}
-      width="100%"
-      height="100%"
-      style={{ overflow: "visible", display: "block" }}
-      role="img"
-      aria-label={`Explorer, ${pose.replace("_", " ")} pose, ${expression} expression`}
-    >
-      <defs>
-        <linearGradient id={id("skin")} x1="0.15" y1="0" x2="0.9" y2="1">
-          <stop offset="0%" stopColor="#EDC29A" />
-          <stop offset="38%" stopColor="#D9A379" />
-          <stop offset="72%" stopColor="#C0875E" />
-          <stop offset="100%" stopColor="#9C6746" />
-        </linearGradient>
-        <linearGradient id={id("skinNeck")} x1="0.2" y1="0" x2="0.85" y2="1">
-          <stop offset="0%" stopColor="#B97E55" />
-          <stop offset="100%" stopColor="#8B5638" />
-        </linearGradient>
-        <linearGradient id={id("hairBase")} x1="0.2" y1="0" x2="0.8" y2="1">
-          <stop offset="0%" stopColor="#232936" />
-          <stop offset="45%" stopColor="#12151D" />
-          <stop offset="100%" stopColor="#080A0F" />
-        </linearGradient>
-        <linearGradient id={id("hoodie")} x1="0.1" y1="0" x2="0.9" y2="1">
-          <stop offset="0%" stopColor="#242835" />
-          <stop offset="30%" stopColor="#181B24" />
-          <stop offset="72%" stopColor="#14161D" />
-          <stop offset="100%" stopColor="#0C0E13" />
-        </linearGradient>
-        <linearGradient id={id("hoodieDark")} x1="0.2" y1="0" x2="0.8" y2="1">
-          <stop offset="0%" stopColor="#12151C" />
-          <stop offset="100%" stopColor="#080A0E" />
-        </linearGradient>
-        <linearGradient id={id("sleeveShade")} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#3A4152" stopOpacity="0.28" />
-          <stop offset="55%" stopColor="#000000" stopOpacity="0" />
-          <stop offset="100%" stopColor="#000000" stopOpacity="0.55" />
-        </linearGradient>
-        <linearGradient id={id("tee")} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#B9FEFF" />
-          <stop offset="45%" stopColor={COLORS.cyan} />
-          <stop offset="100%" stopColor="#007A88" />
-        </linearGradient>
-        <linearGradient id={id("lipUpper")} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#9A5A50" />
-          <stop offset="100%" stopColor="#7C403C" />
-        </linearGradient>
-        <linearGradient id={id("lipLower")} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#B06A5B" />
-          <stop offset="65%" stopColor="#9C584D" />
-          <stop offset="100%" stopColor="#7A3E38" />
-        </linearGradient>
-        <radialGradient id={id("iris")} cx="0.45" cy="0.4" r="0.7">
-          <stop offset="0%" stopColor="#B98552" />
-          <stop offset="38%" stopColor="#8B5A31" />
-          <stop offset="74%" stopColor="#4A2B17" />
-          <stop offset="100%" stopColor="#170D07" />
-        </radialGradient>
-        <linearGradient id={id("sclera")} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#D9C7B5" />
-          <stop offset="55%" stopColor="#F5EADF" />
-          <stop offset="100%" stopColor="#E3D0BD" />
-        </linearGradient>
-        <linearGradient
-          id={id("rimCyan")}
-          gradientUnits="userSpaceOnUse"
-          x1="270"
-          y1="46"
-          x2="300"
-          y2="600"
-        >
-          <stop offset="0%" stopColor={COLORS.cyan} stopOpacity="0.95" />
-          <stop offset="55%" stopColor={COLORS.cyan} stopOpacity="0.35" />
-          <stop offset="100%" stopColor={COLORS.cyan} stopOpacity="0" />
-        </linearGradient>
-        <linearGradient
-          id={id("rimCrimson")}
-          gradientUnits="userSpaceOnUse"
-          x1="360"
-          y1="30"
-          x2="360"
-          y2="560"
-        >
-          <stop offset="0%" stopColor={COLORS.crimson} stopOpacity="0.95" />
-          <stop offset="60%" stopColor={COLORS.crimson} stopOpacity="0.4" />
-          <stop offset="100%" stopColor={COLORS.crimson} stopOpacity="0" />
-        </linearGradient>
-        <linearGradient
-          id={id("rimAmber")}
-          gradientUnits="userSpaceOnUse"
-          x1="520"
-          y1="70"
-          x2="470"
-          y2="640"
-        >
-          <stop offset="0%" stopColor={COLORS.amber} stopOpacity="0.9" />
-          <stop offset="58%" stopColor={COLORS.amber} stopOpacity="0.35" />
-          <stop offset="100%" stopColor={COLORS.amber} stopOpacity="0" />
-        </linearGradient>
-        <linearGradient id={id("stubbleFade")} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#241C25" stopOpacity="0" />
-          <stop offset="55%" stopColor="#241C25" stopOpacity="0.5" />
-          <stop offset="100%" stopColor="#241C25" stopOpacity="0.72" />
-        </linearGradient>
-        <pattern
-          id={id("stubble")}
-          width="5.5"
-          height="5.5"
-          patternUnits="userSpaceOnUse"
-        >
-          <circle cx="1.3" cy="1.4" r="0.7" fill="#1C1520" />
-          <circle cx="3.9" cy="3.3" r="0.55" fill="#2B2230" />
-          <circle cx="3.2" cy="0.8" r="0.4" fill="#302636" />
-        </pattern>
-        <filter id={id("glow")} x="-40%" y="-40%" width="180%" height="180%">
-          <feGaussianBlur stdDeviation="4.5" result="blur" />
-          <feMerge>
-            <feMergeNode in="blur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-        <filter id={id("soft")} x="-30%" y="-30%" width="160%" height="160%">
-          <feGaussianBlur stdDeviation="12" />
-        </filter>
-        <filter id={id("figureShadow")} x="-25%" y="-20%" width="150%" height="150%">
-          <feDropShadow
-            dx="0"
-            dy="22"
-            stdDeviation="26"
-            floodColor="#000000"
-            floodOpacity="0.6"
-          />
-        </filter>
-        <clipPath id={id("beard")}>
-          <path d="M298 226 C302 258 320 282 346 295 C352 298 368 298 374 295 C400 282 418 256 424 226 C420 254 402 282 368 298 C334 292 304 258 298 226 Z" />
-          <path d="M330 270 C342 262 378 262 390 270 C390 288 378 300 360 300 C342 300 330 288 330 270 Z" />
-        </clipPath>
-      </defs>
+    <g transform={`translate(0 ${bob})`}>
+      <ellipse cx={360} cy={946} rx={172} ry={22} fill="#000000" opacity={0.55} />
+      <g transform={`rotate(${hipRot} 360 660)`}>
+        {leg(-1, Math.sin(frame * 0.22 + Math.PI) * 0.9)}
+        {leg(1, stride * 0.9)}
+      </g>
 
-      <g filter={`url(#${id("figureShadow")})`}>
-        <g transform={`rotate(${scene.bodySkew} ${CX} 760)`}>
-          {pose === "walking_train" ? (
-            <>
-              {/* backpack body behind the far shoulder */}
-              <path
-                d="M196 372 C178 400 172 470 182 540 C190 596 208 630 232 640 L262 600 C238 560 230 500 238 440 C244 400 254 378 264 368 Z"
-                fill="#0B0E14"
-                stroke="#202633"
-                strokeWidth="2"
-              />
-              <path
-                d="M204 420 C198 470 200 520 212 560"
-                stroke="#2A3140"
-                strokeWidth="3"
-                fill="none"
-                opacity="0.7"
-              />
-            </>
-          ) : null}
+      <g transform={`rotate(${shoulderRot} 360 360)`}>
+        {/* coat */}
+        <path
+          d={`M312 334 C286 336 246 344 220 362 C200 376 190 404 186 440 C182 488 186 540 192 580 C196 606 200 616 ${206 + hem * 0.4} 632 C244 648 476 648 ${514 + hem * 0.4} 632 C520 616 524 606 528 580 C534 540 538 488 534 440 C530 404 520 376 500 362 C474 344 434 336 408 334 C400 350 382 358 360 358 C338 358 320 350 312 334 Z`}
+          fill={`url(#${id}-coat)`}
+          stroke={INK}
+          strokeWidth={4}
+          strokeLinejoin="round"
+        />
+        {/* waist and hem structure */}
+        <path d="M360 360 L360 636" stroke="#05070B" strokeWidth={2.4} opacity={0.5} />
+        <path d={`M${310 + hem} 628 C346 ${638 + hem * 0.4} 386 ${638 + hem * 0.4} ${414 + hem} 626`} stroke="#05070B" strokeWidth={2.6} opacity={0.55} fill="none" />
+        <path d="M232 430 C222 480 220 540 226 592" stroke="#05070B" strokeWidth={2.2} opacity={0.32} fill="none" />
+        <path d="M488 430 C498 480 500 540 494 592" stroke="#05070B" strokeWidth={2.2} opacity={0.32} fill="none" />
+        <path d="M288 372 C280 404 276 436 282 468" stroke="#05070B" strokeWidth={2} opacity={0.28} fill="none" />
+        <path
+          d={`M312 334 C286 336 246 344 220 362 C200 376 190 404 186 440 C182 488 186 540 192 580 C196 606 200 616 ${206 + hem * 0.4} 632`}
+          stroke={`url(#${id}-rim)`}
+          strokeWidth={7}
+          strokeLinecap="round"
+          fill="none"
+        />
+        <path d="M408 334 C474 344 520 376 534 440" stroke={rim} strokeWidth={2.6} strokeLinecap="round" fill="none" opacity={0.35} />
 
-          {/* hood behind neck */}
-          <path
-            d="M292 352 C282 322 304 296 332 288 L360 284 L388 288 C416 296 438 322 428 352 C414 382 306 382 292 352 Z"
-            fill={`url(#${id("hoodieDark")})`}
-            stroke="#232936"
-            strokeWidth="2"
-          />
-
-          {/* neck + trapezius */}
-          <path
-            d="M322 268 C320 302 318 322 310 340 C290 348 268 360 250 378 C288 382 316 370 330 352 L390 352 C404 370 432 382 470 378 C452 360 430 348 410 340 C402 322 400 302 398 268 Z"
-            fill={`url(#${id("skinNeck")})`}
-          />
-          {/* sternocleidomastoid + jaw shadow */}
-          <path
-            d="M330 292 C334 318 344 338 360 350 C376 338 386 318 390 292 C382 318 374 330 360 336 C346 330 338 318 330 292 Z"
-            fill="#6F422C"
-            opacity="0.45"
-          />
-          <path
-            d="M318 340 C340 358 380 358 402 340 C392 364 328 364 318 340 Z"
-            fill="#633A27"
-            opacity="0.5"
-          />
-          {/* collarbones */}
-          <path
-            d="M318 360 C334 368 348 371 360 371 M402 360 C386 368 372 371 360 371"
-            stroke="#E3B189"
-            strokeWidth="2.4"
-            fill="none"
-            opacity="0.35"
-            strokeLinecap="round"
-          />
-
-          {/* hoodie body */}
-          <path
-            d="M360 346 C304 348 250 366 214 398 C180 428 168 472 162 518 L152 618 C146 668 148 718 150 760 L570 760 C572 718 574 668 568 618 L558 518 C552 472 540 428 506 398 C470 366 416 350 360 346 Z"
-            fill={`url(#${id("hoodie")})`}
-            stroke="#272E3C"
-            strokeWidth="2.6"
-          />
-          {/* shoulder seams */}
-          <path
-            d="M298 366 C266 380 232 402 210 432 M422 366 C454 380 488 402 510 432"
-            stroke="#2E3545"
-            strokeWidth="2.2"
-            fill="none"
-          />
-          {/* chest folds */}
-          <g stroke="#07090D" fill="none" strokeLinecap="round" opacity="0.5">
-            <path d="M262 470 C286 496 290 540 276 582" strokeWidth="4" />
-            <path d="M458 470 C436 498 432 540 446 584" strokeWidth="4" />
-            <path d="M320 560 C344 578 378 578 402 560" strokeWidth="3" />
-            <path d="M238 640 C266 660 286 700 288 742" strokeWidth="4" />
-            <path d="M482 640 C454 660 434 700 432 742" strokeWidth="4" />
-            <path d="M356 610 L356 700" strokeWidth="2.4" opacity="0.7" />
+        {outfit === "travel_backpack" ? (
+          <g>
+            <path d="M244 344 C228 404 230 490 244 580" stroke="#7A5A2E" strokeWidth={30} strokeLinecap="round" fill="none" />
+            <path d="M476 344 C492 404 490 490 476 580" stroke="#6B4E27" strokeWidth={30} strokeLinecap="round" fill="none" />
+            <path d="M244 344 C228 404 230 490 244 580" stroke={INK} strokeWidth={3.6} strokeLinecap="round" fill="none" opacity={0.7} />
+            <path d="M476 344 C492 404 490 490 476 580" stroke={INK} strokeWidth={3.6} strokeLinecap="round" fill="none" opacity={0.7} />
+            <path d="M252 430 L280 426 M256 456 L282 452" stroke="#FFB800" strokeWidth={3} strokeLinecap="round" opacity={0.65} />
           </g>
-          {/* fabric highlights */}
-          <g stroke="#495468" fill="none" strokeLinecap="round" opacity="0.32">
-            <path d="M246 470 C264 494 268 526 262 556" strokeWidth="2.4" />
-            <path d="M474 470 C456 494 452 526 458 556" strokeWidth="2.4" />
-            <path d="M330 570 C348 582 372 582 390 570" strokeWidth="2" />
-          </g>
-          {/* tech chest seam */}
-          <path
-            d="M300 430 C286 500 284 570 292 640"
-            stroke="#333C4E"
-            strokeWidth="2"
-            fill="none"
-          />
-          <path
-            d="M300 462 L318 462"
-            stroke={COLORS.cyan}
-            strokeWidth="2"
-            opacity="0.75"
-          />
-          <rect
-            x="296"
-            y="474"
-            width="10"
-            height="26"
-            rx="2"
-            fill="#0B0E14"
-            stroke="#344054"
-            strokeWidth="1.4"
-          />
-          <circle cx="301" cy="487" r="2" fill={COLORS.cyan} opacity="0.9" />
+        ) : null}
 
-          {/* hood collar */}
-          <path
-            d="M300 354 C316 388 404 388 420 354 C446 362 458 384 454 404 C420 430 300 430 266 404 C262 384 274 362 300 354 Z"
-            fill={`url(#${id("hoodieDark")})`}
-            stroke="#2B3343"
-            strokeWidth="2.4"
-          />
-          <path
-            d="M286 372 C300 404 420 404 434 372"
-            stroke="#394357"
-            strokeWidth="2"
-            fill="none"
-            opacity="0.65"
-          />
-          {/* cyan tee in the neckline */}
-          <path
-            d="M322 368 C334 400 386 400 398 368 L412 382 C400 424 320 424 308 382 Z"
-            fill={`url(#${id("tee")})`}
-          />
-          <path
-            d="M322 368 C334 400 386 400 398 368 L412 382 C400 424 320 424 308 382 Z"
-            fill={COLORS.cyan}
-            opacity="0.25"
-            filter={`url(#${id("glow")})`}
-          />
-          {/* drawstrings */}
-          <path
-            d="M332 398 C326 438 322 478 326 514 M388 398 C394 438 398 478 394 514"
-            stroke="#7E899C"
-            strokeWidth="4"
-            strokeLinecap="round"
-            fill="none"
-          />
-          <rect x="322" y="512" width="9" height="20" rx="3" fill="#9BA7BA" />
-          <rect x="390" y="512" width="9" height="20" rx="3" fill="#9BA7BA" />
-          <rect
-            x="322.5"
-            y="522"
-            width="8"
-            height="9"
-            rx="2"
-            fill={COLORS.cyan}
-            opacity="0.8"
-          />
-          <rect
-            x="390.5"
-            y="522"
-            width="8"
-            height="9"
-            rx="2"
-            fill={COLORS.cyan}
-            opacity="0.8"
-          />
+        {arm(-1, stride)}
+        {arm(1, -stride)}
 
-          {/* rim light along the shoulders */}
-          <path
-            d="M214 398 C188 424 172 468 166 514"
-            stroke={rimGradient}
-            strokeWidth="4"
-            fill="none"
-            strokeLinecap="round"
-            filter={`url(#${id("glow")})`}
-          />
-          <path
-            d="M506 398 C534 424 548 470 556 516"
-            stroke={rimGradient}
-            strokeWidth="2.6"
-            fill="none"
-            strokeLinecap="round"
-            opacity="0.6"
-          />
+        {/* neck */}
+        <path
+          d="M322 266 L320 316 C320 336 336 344 360 344 C384 344 400 336 400 316 L398 266 Z"
+          fill={`url(#${id}-skin)`}
+          stroke={INK}
+          strokeWidth={3.2}
+        />
+        <path d="M322 280 C338 300 384 300 398 280 L398 308 C382 324 338 324 322 308 Z" fill="#7E4C30" opacity={0.4} />
 
-          {/* ── arms ──────────────────────────────────────────────────── */}
-          {pose === "standing" ? (
-            <g>
-              {/* upper arms */}
-              <circle cx="196" cy="470" r="46" fill={`url(#${id("hoodie")})`} />
-              <circle cx="524" cy="470" r="46" fill={`url(#${id("hoodie")})`} />
-              <path
-                d={limb({ x: 210, y: 430 }, { x: 180, y: 592 }, 98, 78, -10)}
-                fill={`url(#${id("hoodie")})`}
-                stroke="#252C39"
-                strokeWidth="2"
-              />
-              <path
-                d={limb({ x: 510, y: 430 }, { x: 540, y: 592 }, 98, 78, 10)}
-                fill={`url(#${id("hoodie")})`}
-                stroke="#252C39"
-                strokeWidth="2"
-              />
-              {/* right forearm (lower) */}
-              <path
-                d={limb({ x: 540, y: 598 }, { x: 286, y: 636 }, 68, 58, -14)}
-                fill={`url(#${id("hoodie")})`}
-                stroke="#242B38"
-                strokeWidth="2"
-              />
-              <path
-                d={limb({ x: 540, y: 598 }, { x: 286, y: 636 }, 68, 58, -14)}
-                fill={`url(#${id("sleeveShade")})`}
-              />
-              {/* left forearm (upper) */}
-              <path
-                d={limb({ x: 180, y: 588 }, { x: 458, y: 572 }, 70, 58, 12)}
-                fill={`url(#${id("hoodie")})`}
-                stroke="#2A3242"
-                strokeWidth="2"
-              />
-              <path
-                d={limb({ x: 180, y: 588 }, { x: 458, y: 572 }, 70, 58, 12)}
-                fill={`url(#${id("sleeveShade")})`}
-              />
-              {/* fold lines */}
-              <g stroke="#080A0F" fill="none" opacity="0.55" strokeLinecap="round">
-                <path d="M196 520 C206 544 206 566 198 584" strokeWidth="3.4" />
-                <path d="M516 520 C506 544 506 566 514 584" strokeWidth="3.4" />
-                <path d="M236 600 C300 592 368 586 430 578" strokeWidth="3" />
-                <path d="M320 622 C380 626 436 620 494 606" strokeWidth="3" />
-              </g>
-              <g stroke="#454F63" fill="none" opacity="0.3" strokeLinecap="round">
-                <path d="M212 536 C220 556 220 570 214 582" strokeWidth="2" />
-                <path d="M500 536 C492 556 492 570 498 582" strokeWidth="2" />
-              </g>
-              {/* wrist watch */}
-              <path
-                d="M404 578 C416 570 432 574 436 586 L410 596 Z"
-                fill="#0B0E14"
-                stroke="#2C3545"
-                strokeWidth="1.6"
-              />
-              <rect
-                x="410"
-                y="576"
-                width="16"
-                height="12"
-                rx="2"
-                fill={COLORS.cyan}
-                opacity="0.7"
-              />
-              {/* left hand gripping right bicep */}
-              <g transform="translate(474 566) rotate(14)">
-                <path
-                  d="M-34 -18 C-18 -30 16 -30 30 -14 C42 0 38 24 22 34 C6 44 -18 38 -30 24 C-40 12 -42 -6 -34 -18 Z"
-                  fill={`url(#${id("skin")})`}
-                  stroke="#8F5B3D"
-                  strokeWidth="1.4"
-                  strokeOpacity="0.55"
-                />
-                {finger(-30, 18, 13, 46, -16, id("skin"), "#8F5B3D")}
-                {finger(-16, 24, 13, 52, -6, id("skin"), "#8F5B3D")}
-                {finger(-2, 26, 13, 52, 3, id("skin"), "#8F5B3D")}
-                {finger(12, 22, 12, 46, 12, id("skin"), "#8F5B3D")}
-                <path
-                  d="M-30 -12 C-18 -4 -12 10 -14 26"
-                  stroke="#8F5B3D"
-                  strokeWidth="1.4"
-                  fill="none"
-                  opacity="0.55"
-                />
-              </g>
-              {/* right hand tucked under the left forearm */}
-              <g transform="translate(300 632) rotate(-6)">
-                <path
-                  d="M-30 -14 C-14 -24 12 -24 26 -10 C36 4 30 24 14 30 C-4 36 -24 28 -32 14 C-38 2 -38 -6 -30 -14 Z"
-                  fill={`url(#${id("skinNeck")})`}
-                  stroke="#7E4C33"
-                  strokeWidth="1.4"
-                  strokeOpacity="0.5"
-                />
-                {finger(-24, 16, 12, 34, -14, id("skinNeck"), "#7E4C33")}
-                {finger(-11, 20, 12, 38, -5, id("skinNeck"), "#7E4C33")}
-                {finger(2, 20, 12, 38, 3, id("skinNeck"), "#7E4C33")}
-              </g>
-            </g>
-          ) : null}
-
-          {pose === "walking_train" ? (
-            <g>
-              {/* diagonal backpack strap */}
-              <path
-                d="M252 372 L476 760 L536 760 L312 372 Z"
-                fill="#0B0E14"
-                stroke="#222938"
-                strokeWidth="2"
-              />
-              <path
-                d="M268 390 L470 738"
-                stroke="#2F3848"
-                strokeWidth="2.4"
-                strokeDasharray="3 7"
-                opacity="0.8"
-              />
-              <path
-                d="M316 470 L382 470 L398 506 L326 506 Z"
-                fill="#10141C"
-                stroke="#2D3646"
-                strokeWidth="2"
-              />
-              <rect
-                x="330"
-                y="480"
-                width="50"
-                height="8"
-                rx="3"
-                fill={COLORS.cyan}
-                opacity="0.55"
-              />
-              {/* far arm */}
-              <path
-                d={limb({ x: 196, y: 448 }, { x: 178, y: 632 }, 86, 66, -8)}
-                fill={`url(#${id("hoodieDark")})`}
-                stroke="#1F2531"
-                strokeWidth="2"
-              />
-              <path
-                d={limb({ x: 178, y: 632 }, { x: 166, y: 744 }, 64, 52, -6)}
-                fill={`url(#${id("hoodieDark")})`}
-                stroke="#1F2531"
-                strokeWidth="2"
-              />
-              {/* near arm, hand holding the strap */}
-              <circle cx="520" cy="470" r="44" fill={`url(#${id("hoodie")})`} />
-              <path
-                d={limb({ x: 512, y: 438 }, { x: 548, y: 610 }, 96, 74, 10)}
-                fill={`url(#${id("hoodie")})`}
-                stroke="#262E3C"
-                strokeWidth="2"
-              />
-              <path
-                d={limb({ x: 548, y: 610 }, { x: 386, y: 542 }, 70, 56, -8)}
-                fill={`url(#${id("hoodie")})`}
-                stroke="#262E3C"
-                strokeWidth="2"
-              />
-              <path
-                d={limb({ x: 548, y: 610 }, { x: 386, y: 542 }, 70, 56, -8)}
-                fill={`url(#${id("sleeveShade")})`}
-              />
-              <g stroke="#080A0F" fill="none" opacity="0.5" strokeLinecap="round">
-                <path d="M530 520 C540 552 542 576 538 592" strokeWidth="3.2" />
-                <path d="M424 562 C462 570 504 582 540 596" strokeWidth="3" />
-              </g>
-              {/* gripping hand */}
-              <g transform="translate(382 540) rotate(-24)">
-                <path
-                  d="M-28 -20 C-10 -34 18 -30 30 -12 C40 4 32 26 14 34 C-4 42 -26 34 -34 18 C-40 6 -38 -10 -28 -20 Z"
-                  fill={`url(#${id("skin")})`}
-                  stroke="#8F5B3D"
-                  strokeWidth="1.4"
-                  strokeOpacity="0.55"
-                />
-                {finger(-28, 8, 13, 38, -22, id("skin"), "#8F5B3D")}
-                {finger(-14, 12, 13, 44, -8, id("skin"), "#8F5B3D")}
-                {finger(0, 12, 13, 44, 4, id("skin"), "#8F5B3D")}
-                {finger(14, 8, 12, 38, 16, id("skin"), "#8F5B3D")}
-              </g>
-              {/* far hand */}
-              <g transform="translate(160 740) rotate(4)">
-                <ellipse cx="0" cy="0" rx="26" ry="34" fill={`url(#${id("skinNeck")})`} />
-                {finger(-22, 22, 11, 34, -10, id("skinNeck"), "#7E4C33")}
-                {finger(-9, 26, 11, 38, -3, id("skinNeck"), "#7E4C33")}
-                {finger(4, 26, 11, 36, 4, id("skinNeck"), "#7E4C33")}
-              </g>
-            </g>
-          ) : null}
-
-          {pose === "coding" ? (
-            <g>
-              {/* shoulders / upper arms */}
-              <circle cx="212" cy="468" r="46" fill={`url(#${id("hoodie")})`} />
-              <circle cx="508" cy="468" r="46" fill={`url(#${id("hoodie")})`} />
-              <path
-                d={limb({ x: 224, y: 440 }, { x: 244, y: 610 }, 98, 76, -8)}
-                fill={`url(#${id("hoodie")})`}
-                stroke="#262E3C"
-                strokeWidth="2"
-              />
-              <path
-                d={limb({ x: 496, y: 440 }, { x: 476, y: 610 }, 98, 76, 8)}
-                fill={`url(#${id("hoodie")})`}
-                stroke="#262E3C"
-                strokeWidth="2"
-              />
-              {/* forearms reaching down to the holographic keys */}
-              <path
-                d={limb({ x: 244, y: 606 }, { x: 318, y: 712 }, 70, 56, -4)}
-                fill={`url(#${id("hoodie")})`}
-                stroke="#2A3242"
-                strokeWidth="2"
-              />
-              <path
-                d={limb({ x: 476, y: 606 }, { x: 402, y: 712 }, 70, 56, 4)}
-                fill={`url(#${id("hoodie")})`}
-                stroke="#2A3242"
-                strokeWidth="2"
-              />
-              <g stroke="#080A0F" fill="none" opacity="0.5" strokeLinecap="round">
-                <path d="M232 528 C242 558 246 584 246 600" strokeWidth="3.2" />
-                <path d="M488 528 C478 558 474 584 474 600" strokeWidth="3.2" />
-                <path d="M268 660 C292 680 312 696 324 708" strokeWidth="3" />
-                <path d="M452 660 C428 680 408 696 396 708" strokeWidth="3" />
-              </g>
-              {/* hands */}
-              <g transform="translate(318 722) rotate(-3)">
-                <path
-                  d="M-30 -22 C-12 -34 18 -32 32 -14 C42 2 36 26 18 34 C0 42 -24 34 -34 18 C-42 6 -40 -12 -30 -22 Z"
-                  fill={`url(#${id("skin")})`}
-                  stroke="#8F5B3D"
-                  strokeWidth="1.4"
-                  strokeOpacity="0.55"
-                />
-                {finger(-30, 6, 12, 52, -14, id("skin"), "#8F5B3D")}
-                {finger(-17, 10, 12, 58, -4, id("skin"), "#8F5B3D")}
-                {finger(-4, 12, 12, 58, 4, id("skin"), "#8F5B3D")}
-                {finger(9, 8, 11, 50, 12, id("skin"), "#8F5B3D")}
-                <path
-                  d="M-30 -6 C-16 4 -10 18 -12 34"
-                  stroke="#8F5B3D"
-                  strokeWidth="1.4"
-                  fill="none"
-                  opacity="0.5"
-                />
-              </g>
-              <g transform="translate(402 714) rotate(4)">
-                <path
-                  d="M-30 -22 C-12 -34 18 -32 32 -14 C42 2 36 26 18 34 C0 42 -24 34 -34 18 C-42 6 -40 -12 -30 -22 Z"
-                  fill={`url(#${id("skin")})`}
-                  stroke="#8F5B3D"
-                  strokeWidth="1.4"
-                  strokeOpacity="0.55"
-                />
-                {finger(-30, 6, 12, 50, -12, id("skin"), "#8F5B3D")}
-                {finger(-17, 10, 12, 56, -3, id("skin"), "#8F5B3D")}
-                {finger(-4, 12, 12, 56, 5, id("skin"), "#8F5B3D")}
-                {finger(9, 8, 11, 48, 13, id("skin"), "#8F5B3D")}
-              </g>
-            </g>
-          ) : null}
-
-          {pose === "stressed_desk" ? (
-            <g>
-              {/* left arm folded low */}
-              <circle cx="208" cy="470" r="44" fill={`url(#${id("hoodieDark")})`} />
-              <path
-                d={limb({ x: 216, y: 442 }, { x: 188, y: 614 }, 94, 72, -8)}
-                fill={`url(#${id("hoodieDark")})`}
-                stroke="#1F2531"
-                strokeWidth="2"
-              />
-              <path
-                d={limb({ x: 188, y: 614 }, { x: 322, y: 648 }, 68, 54, -8)}
-                fill={`url(#${id("hoodieDark")})`}
-                stroke="#1F2531"
-                strokeWidth="2"
-              />
-              <g transform="translate(340 654) rotate(10)">
-                <ellipse cx="0" cy="0" rx="25" ry="30" fill={`url(#${id("skinNeck")})`} />
-                {finger(-22, 18, 11, 34, -8, id("skinNeck"), "#7E4C33")}
-                {finger(-9, 22, 11, 36, 0, id("skinNeck"), "#7E4C33")}
-                {finger(4, 20, 11, 34, 8, id("skinNeck"), "#7E4C33")}
-              </g>
-              {/* right arm raised to the forehead */}
-              <circle cx="520" cy="452" r="44" fill={`url(#${id("hoodieDark")})`} />
-              <path
-                d={limb({ x: 514, y: 430 }, { x: 598, y: 438 }, 94, 74, 4)}
-                fill={`url(#${id("hoodieDark")})`}
-                stroke="#1F2531"
-                strokeWidth="2"
-              />
-              <path
-                d={limb({ x: 598, y: 438 }, { x: 430, y: 196 }, 70, 52, -14)}
-                fill={`url(#${id("hoodieDark")})`}
-                stroke="#252C39"
-                strokeWidth="2"
-              />
-              <path
-                d={limb({ x: 598, y: 438 }, { x: 430, y: 196 }, 70, 52, -14)}
-                fill={`url(#${id("sleeveShade")})`}
-              />
-              <g stroke="#080A0F" fill="none" opacity="0.5" strokeLinecap="round">
-                <path d="M214 528 C224 560 224 586 218 604" strokeWidth="3.2" />
-                <path d="M536 500 C560 486 580 468 594 448" strokeWidth="3" />
-                <path d="M560 380 C520 340 476 300 442 250" strokeWidth="3" />
-              </g>
-            </g>
-          ) : null}
-
-          {pose === "together" ? (
-            <g>
-              <circle cx="202" cy="468" r="44" fill={`url(#${id("hoodie")})`} />
-              <circle cx="518" cy="468" r="44" fill={`url(#${id("hoodie")})`} />
-              <path
-                d={limb({ x: 212, y: 440 }, { x: 188, y: 622 }, 94, 70, -8)}
-                fill={`url(#${id("hoodie")})`}
-                stroke="#262E3C"
-                strokeWidth="2"
-              />
-              <path
-                d={limb({ x: 188, y: 622 }, { x: 176, y: 748 }, 66, 54, -4)}
-                fill={`url(#${id("hoodie")})`}
-                stroke="#262E3C"
-                strokeWidth="2"
-              />
-              <path
-                d={limb({ x: 508, y: 440 }, { x: 532, y: 622 }, 94, 70, 8)}
-                fill={`url(#${id("hoodie")})`}
-                stroke="#262E3C"
-                strokeWidth="2"
-              />
-              <path
-                d={limb({ x: 532, y: 622 }, { x: 544, y: 748 }, 66, 54, 4)}
-                fill={`url(#${id("hoodie")})`}
-                stroke="#262E3C"
-                strokeWidth="2"
-              />
-              <g stroke="#080A0F" fill="none" opacity="0.45" strokeLinecap="round">
-                <path d="M200 530 C210 562 210 590 202 612" strokeWidth="3" />
-                <path d="M520 530 C510 562 510 590 518 612" strokeWidth="3" />
-              </g>
-              <g transform="translate(174 738) rotate(6)">
-                <ellipse cx="0" cy="0" rx="26" ry="34" fill={`url(#${id("skin")})`} />
-                {finger(-23, 22, 11, 40, -8, id("skin"), "#8F5B3D")}
-                {finger(-10, 26, 11, 44, -2, id("skin"), "#8F5B3D")}
-                {finger(3, 26, 11, 42, 5, id("skin"), "#8F5B3D")}
-              </g>
-              <g transform="translate(546 738) rotate(-6)">
-                <ellipse cx="0" cy="0" rx="26" ry="34" fill={`url(#${id("skin")})`} />
-                {finger(-23, 22, 11, 40, -8, id("skin"), "#8F5B3D")}
-                {finger(-10, 26, 11, 44, -2, id("skin"), "#8F5B3D")}
-                {finger(3, 26, 11, 42, 5, id("skin"), "#8F5B3D")}
-              </g>
-            </g>
-          ) : null}
-
-          {/* ── head ─────────────────────────────────────────────────── */}
-          <g transform={headTranslate}>
-            {/* hair mass behind the face */}
-            <path
-              d="M360 42 C292 42 252 88 256 160 C259 202 268 230 280 252 C290 234 288 214 292 196 C288 172 290 150 300 132 C316 104 340 96 360 96 C384 96 408 108 422 134 C432 156 432 180 428 202 C432 220 432 236 442 252 C456 226 464 198 464 166 C468 90 426 42 360 42 Z"
-              fill={`url(#${id("hairBase")})`}
-            />
-            {/* ears */}
-            <g>
-              <path
-                d="M286 176 C270 168 258 182 262 204 C265 222 274 236 286 238 C294 238 296 226 294 210 Z"
-                fill={`url(#${id("skin")})`}
-                stroke="#8F5B3D"
-                strokeWidth="1.6"
-                strokeOpacity="0.5"
-              />
-              <path
-                d="M277 190 C272 198 272 212 278 222"
-                stroke="#8F5B3D"
-                strokeWidth="2"
-                fill="none"
-                opacity="0.6"
-              />
-              <path
-                d="M434 176 C450 168 462 182 458 204 C455 222 446 236 434 238 C426 238 424 226 426 210 Z"
-                fill={`url(#${id("skin")})`}
-                stroke="#8F5B3D"
-                strokeWidth="1.6"
-                strokeOpacity="0.5"
-              />
-              <path
-                d="M443 190 C448 198 448 212 442 222"
-                stroke="#8F5B3D"
-                strokeWidth="2"
-                fill="none"
-                opacity="0.6"
-              />
-            </g>
-
-            {/* face */}
-            <path
-              d="M289 138 C292 104 320 82 360 82 C402 82 431 106 433 142 C435 170 432 196 423 220 C413 250 392 278 366 294 C362 296 358 296 354 294 C328 278 306 248 297 216 C289 192 287 164 289 138 Z"
-              fill={`url(#${id("skin")})`}
-            />
-
-            {/* cel shading: right plane of the face */}
-            <path
-              d="M428 138 C434 172 430 206 418 232 C408 254 392 274 372 288 C396 276 414 252 424 222 C434 192 436 162 428 138 Z"
-              fill="#8C5739"
-              opacity="0.4"
-            />
-            {/* shadow under the cheekbone + jaw */}
-            <path
-              d="M418 208 C408 230 392 252 372 266 C388 262 404 246 414 224 Z"
-              fill="#7C4A31"
-              opacity="0.3"
-            />
-            {/* forehead / left cheek highlight */}
-            <path
-              d="M300 148 C306 128 322 112 342 104 C330 122 318 144 313 168 C306 164 302 156 300 148 Z"
-              fill="#F0C69B"
-              opacity="0.35"
-            />
-            <ellipse
-              cx="316"
-              cy="218"
-              rx="22"
-              ry="12"
-              fill="#F0C69B"
-              opacity="0.18"
-              transform="rotate(-16 316 218)"
-            />
-            {/* temples */}
-            <path
-              d="M289 138 C286 152 286 168 289 182 C284 174 282 154 289 138 Z"
-              fill="#7C4A31"
-              opacity="0.35"
-            />
-
-            {/* brow ridge shadows + brows */}
-            <path
-              d="M292 164 C306 152 332 148 348 156 C330 154 310 160 298 172 Z"
-              fill="#7C4A31"
-              opacity="0.28"
-            />
-            <path
-              d="M428 164 C414 152 388 148 372 156 C390 154 410 160 422 172 Z"
-              fill="#7C4A31"
-              opacity="0.28"
-            />
-            {drawBrow("left")}
-            {drawBrow("right")}
-
-            {/* eyes */}
-            {drawEye("left")}
-            {drawEye("right")}
-
-            {/* nose */}
-            <path
-              d="M352 182 C350 202 348 218 344 230 C348 238 354 241 360 241 C366 241 372 238 376 230 C372 218 370 202 368 182 Z"
-              fill="#B47A53"
-              opacity="0.25"
-            />
-            <path
-              d="M345 234 C349 242 354 246 360 246 C366 246 371 242 375 234 C371 238 366 240 360 240 C354 240 349 238 345 234 Z"
-              fill="#8F5B3D"
-              opacity="0.5"
-            />
-            <ellipse cx="345" cy="236" rx="4.2" ry="2.6" fill="#5C3522" opacity="0.8" />
-            <ellipse cx="375" cy="236" rx="4.2" ry="2.6" fill="#5C3522" opacity="0.8" />
-            <path
-              d="M356 184 C354 202 352 216 350 226"
-              stroke="#F5D0A7"
-              strokeWidth="2.4"
-              fill="none"
-              opacity="0.4"
-              strokeLinecap="round"
-            />
-            <ellipse cx="359" cy="228" rx="5" ry="3.4" fill="#F0C69B" opacity="0.35" />
-            <path
-              d="M338 232 C330 228 322 230 318 236"
-              stroke="#8F5B3D"
-              strokeWidth="2"
-              fill="none"
-              opacity="0.25"
-              strokeLinecap="round"
-            />
-            <path
-              d="M382 232 C390 228 398 230 402 236"
-              stroke="#8F5B3D"
-              strokeWidth="2"
-              fill="none"
-              opacity="0.25"
-              strokeLinecap="round"
-            />
-
-            {/* philtrum */}
-            <path
-              d="M354 244 C354 250 356 254 360 256 M366 244 C366 250 364 254 360 256"
-              stroke="#8F5B3D"
-              strokeWidth="1.4"
-              fill="none"
-              opacity="0.3"
-              strokeLinecap="round"
-            />
-
-            {/* stubble along the jaw and chin */}
-            <g clipPath={`url(#${id("beard")})`}>
-              <rect x="292" y="220" width="136" height="86" fill={`url(#${id("stubbleFade")})`} />
-              <rect x="292" y="220" width="136" height="86" fill={`url(#${id("stubble")})`} opacity="0.5" />
-            </g>
-            <path
-              d="M330 246 C344 240 376 240 390 246"
-              stroke="#3A2A28"
-              strokeWidth="3"
-              fill="none"
-              opacity="0.18"
-              strokeLinecap="round"
-            />
-
-            {/* mouth with jaw-driven opening */}
-            <g transform={`translate(0 ${n(jaw * 4)})`}>
-              <path
-                d={`M330 ${cornerY} C340 ${cornerY - 7} 350 ${centerY - 7} 356 ${centerY - 3} Q360 ${centerY - 6} 364 ${centerY - 3} C370 ${centerY - 7} 380 ${cornerY - 7} 390 ${cornerY} C380 ${centerY + 2} 340 ${centerY + 2} 330 ${cornerY} Z`}
-                fill={`url(#${id("lipUpper")})`}
-              />
-              <path
-                d={`M332 ${cornerY + 1} C344 ${centerY + 4} 376 ${centerY + 4} 388 ${cornerY + 1} C380 ${centerY + 4 + opening} 340 ${centerY + 4 + opening} 332 ${cornerY + 1} Z`}
-                fill="#33141A"
-              />
-              {jaw > 0.22 ? (
-                <path
-                  d={`M336 ${cornerY + 2} C348 ${centerY + 5} 372 ${centerY + 5} 384 ${cornerY + 2} C378 ${centerY + 8} 342 ${centerY + 8} 336 ${cornerY + 2} Z`}
-                  fill="#E9D9CA"
-                  opacity="0.85"
-                />
-              ) : null}
-              <path
-                d={`M332 ${cornerY + 1 + opening * 0.4} C344 ${centerY + 6 + opening} 376 ${centerY + 6 + opening} 388 ${cornerY + 1 + opening * 0.4} C383 ${centerY + 16 + opening * 0.7} 337 ${centerY + 16 + opening * 0.7} 332 ${cornerY + 1 + opening * 0.4} Z`}
-                fill={`url(#${id("lipLower")})`}
-              />
-              <ellipse
-                cx="360"
-                cy={centerY + 10 + opening * 0.5}
-                rx="13"
-                ry="3"
-                fill="#E7B199"
-                opacity="0.3"
-              />
-              <path
-                d={`M330 ${cornerY} C340 ${centerY + 1} 380 ${centerY + 1} 390 ${cornerY}`}
-                stroke="#5C2C2C"
-                strokeWidth="1.6"
-                fill="none"
-                opacity="0.7"
-              />
-            </g>
-            {/* chin crease */}
-            <path
-              d="M350 288 C356 292 364 292 370 288"
-              stroke="#8F5B3D"
-              strokeWidth="1.6"
-              fill="none"
-              opacity="0.3"
-              strokeLinecap="round"
-            />
-
-            {/* hairline shadow + fringe locks */}
-            <path
-              d="M292 150 C300 122 326 102 356 98 C332 110 314 130 306 154 Z"
-              fill="#3A2A28"
-              opacity="0.16"
-            />
-            <g
-              transform={`translate(${n(wind * 4)} ${n(Math.abs(wind) * -2)}) rotate(${n(wind * 1.2)} 360 90)`}
-            >
-              <path
-                d="M300 130 C310 102 334 84 364 80 C348 96 338 114 332 138 C324 158 318 174 314 188 C304 172 300 150 300 130 Z"
-                fill="#10131A"
-              />
-              <path
-                d={`M356 80 C384 82 410 100 422 128 C408 114 392 104 374 100 C368 92 362 84 356 80 Z`}
-                fill="#151923"
-              />
-              <path
-                d={`M312 122 C330 100 360 88 396 94 C372 98 352 110 338 128 C328 142 322 156 ${318 + n(windLift)} 172 C314 154 312 136 312 122 Z`}
-                fill="#1A1F2A"
-              />
-              <path
-                d={`M292 150 C300 126 312 110 328 98 C318 120 312 146 ${312 + n(windLift)} 174 C306 166 298 158 292 150 Z`}
-                fill="#0D1016"
-              />
-              <path
-                d="M372 88 C392 92 408 106 416 124 C400 112 384 104 368 100 C366 94 368 90 372 88 Z"
-                fill="#242A37"
-                opacity="0.8"
-              />
-              {/* strand highlights */}
-              <g stroke="#39404F" fill="none" opacity="0.7" strokeLinecap="round">
-                <path d="M318 104 C336 96 356 92 376 92" strokeWidth="2" />
-                <path d="M308 128 C316 112 326 100 340 92" strokeWidth="1.6" />
-                <path d="M404 110 C412 118 418 126 422 134" strokeWidth="1.6" />
-              </g>
-            </g>
-            {/* loose strand, wind-reactive */}
-            <path
-              d={`M300 120 C290 140 ${286 + n(wind * 14)} ${158 + n(wind * 6)} ${292 + n(wind * 18)} 176`}
-              stroke="#0C0E14"
-              strokeWidth="4"
-              fill="none"
-              strokeLinecap="round"
-            />
-            {/* sideburns */}
-            <path
-              d="M288 178 C284 196 286 214 292 230 L300 226 C294 210 294 194 298 180 Z"
-              fill="#0C0E14"
-            />
-            <path
-              d="M432 178 C436 196 434 214 428 230 L420 226 C426 210 426 194 422 180 Z"
-              fill="#0C0E14"
-            />
-
-            {/* hair rim light */}
-            <path
-              d="M292 196 C282 160 280 120 300 92 C318 66 342 52 366 46"
-              stroke={rimGradient}
-              strokeWidth="4"
-              fill="none"
-              strokeLinecap="round"
-              filter={`url(#${id("glow")})`}
-            />
-            <path
-              d="M422 134 C432 158 434 186 426 210"
-              stroke={rimGradient}
-              strokeWidth="2.4"
-              fill="none"
-              strokeLinecap="round"
-              opacity="0.55"
-            />
-          </g>
-
-          {/* hand pressed to the brow sits in front of the head */}
-          {pose === "stressed_desk" ? (
-            <g transform="translate(420 186) rotate(-32)">
-              <path
-                d="M-30 -22 C-12 -36 16 -34 30 -16 C42 0 36 26 18 36 C0 44 -24 36 -34 20 C-42 6 -40 -12 -30 -22 Z"
-                fill={`url(#${id("skin")})`}
-                stroke="#8F5B3D"
-                strokeWidth="1.4"
-                strokeOpacity="0.6"
-              />
-              {finger(-30, 4, 12, 46, -18, id("skin"), "#8F5B3D")}
-              {finger(-17, 8, 12, 52, -7, id("skin"), "#8F5B3D")}
-              {finger(-4, 10, 12, 54, 3, id("skin"), "#8F5B3D")}
-              {finger(9, 6, 11, 46, 13, id("skin"), "#8F5B3D")}
-              <path
-                d="M-28 -8 C-14 0 -8 14 -10 30"
-                stroke="#8F5B3D"
-                strokeWidth="1.4"
-                fill="none"
-                opacity="0.5"
-              />
-            </g>
-          ) : null}
-
-          {/* ── holographic keyboard ────────────────────────────────── */}
-          {pose === "coding" ? (
-            <g opacity="0.9">
-              <path
-                d="M186 760 L226 706 L494 706 L534 760 Z"
-                fill={COLORS.cyan}
-                opacity="0.06"
-                stroke={COLORS.cyan}
-                strokeWidth="1.6"
-                strokeOpacity="0.55"
-              />
-              {Array.from({ length: 4 }, (_, i) => {
-                const y = 714 + i * 12;
-                const inset = 40 - i * 6;
-                return (
-                  <path
-                    key={i}
-                    d={`M${226 + inset} ${y} L${494 - inset} ${y}`}
-                    stroke={COLORS.cyan}
-                    strokeWidth="1.2"
-                    opacity={0.45 - i * 0.06}
-                  />
-                );
-              })}
-              {Array.from({ length: 9 }, (_, i) => {
-                const x = 240 + i * 30;
-                return (
-                  <path
-                    key={i}
-                    d={`M${x} 708 L${x - (x - 360) * 0.18} 760`}
-                    stroke={COLORS.cyan}
-                    strokeWidth="1"
-                    opacity="0.22"
-                  />
-                );
-              })}
-              <rect
-                x="212"
-                y="714"
-                width="296"
-                height="46"
-                fill="none"
-                stroke={COLORS.cyan}
-                strokeWidth="1"
-                opacity={0.3 + 0.25 * Math.abs(Math.sin(frame * 0.08))}
-              />
-              <path
-                d="M240 740 L300 740 M330 744 L360 744 M390 736 L430 736"
-                stroke={COLORS.cyan}
-                strokeWidth="2"
-                opacity="0.6"
-                filter={`url(#${id("glow")})`}
-              />
-            </g>
-          ) : null}
-
-          {/* ── pose lighting ───────────────────────────────────────── */}
-          {pose === "coding" ? (
-            <g style={{ mixBlendMode: "screen" }} opacity="0.9">
-              <ellipse cx="360" cy="700" rx="330" ry="150" fill={COLORS.cyan} opacity="0.13" />
-              <ellipse cx="360" cy="330" rx="150" ry="90" fill={COLORS.cyan} opacity="0.1" />
-            </g>
-          ) : null}
-          {pose === "stressed_desk" ? (
-            <g style={{ mixBlendMode: "screen" }}>
-              <ellipse cx="360" cy="40" rx="330" ry="220" fill={COLORS.crimson} opacity="0.16" />
-              <ellipse cx="360" cy="120" rx="150" ry="120" fill={COLORS.crimson} opacity="0.12" />
-            </g>
-          ) : null}
-          {pose === "together" ? (
-            <g style={{ mixBlendMode: "screen" }}>
-              <ellipse cx="620" cy="330" rx="200" ry="360" fill={COLORS.amber} opacity="0.1" />
-            </g>
-          ) : null}
+        {/* hair mass, full coverage from behind */}
+        <g transform="translate(360 182) scale(0.76) translate(-360 -200)">
+        <path
+          d="M360 76 C294 76 252 124 248 188 C244 234 256 276 280 298 C300 314 330 320 360 320 C390 320 420 314 440 298 C464 276 476 234 472 188 C468 124 426 76 360 76 Z"
+          fill={`url(#${id}-hair)`}
+          stroke={INK}
+          strokeWidth={4}
+          strokeLinejoin="round"
+        />
+        {/* strand ink, painted on top — never gaps */}
+        <path
+          d={ribbon(
+            [
+              { x: 352, y: 120 },
+              { x: 330, y: 178 },
+              { x: 334, y: 244 },
+              { x: 352, y: 306 },
+            ],
+            [16, 12, 8, 2],
+          )}
+          fill="#1C2331"
+          opacity={0.85}
+        />
+        <path
+          d={ribbon(
+            [
+              { x: 386, y: 112 },
+              { x: 410, y: 174 },
+              { x: 404, y: 242 },
+              { x: 384, y: 304 },
+            ],
+            [14, 11, 7, 2],
+          )}
+          fill="#141A26"
+          opacity={0.8}
+        />
+        <path
+          d={ribbon(
+            [
+              { x: 306, y: 168 },
+              { x: 288, y: 224 },
+              { x: 296, y: 282 },
+            ],
+            [12, 8, 2],
+          )}
+          fill="#0F141E"
+        />
+        <path
+          d={ribbon(
+            [
+              { x: 428, y: 156 },
+              { x: 444, y: 216 },
+              { x: 434, y: 280 },
+            ],
+            [11, 7, 2],
+          )}
+          fill="#0F141E"
+        />
+        <path
+          d="M256 182 C258 136 288 100 330 88"
+          stroke={`url(#${id}-rim)`}
+          strokeWidth={9}
+          strokeLinecap="round"
+          fill="none"
+        />
         </g>
+        {/* nape shading */}
+        <path d="M318 292 C340 308 380 308 402 292 C394 318 326 318 318 292 Z" fill="#05070B" opacity={0.55} />
+      </g>
+    </g>
+  );
+};
+
+/** Side profile, walking; ribcage leans forward, hair trails. */
+const FullBodyProfile: React.FC<FullBodyProps> = ({ id, palette, outfit, frame, rim }) => {
+  const stride = Math.sin(frame * 0.22);
+  const bob = Math.abs(Math.cos(frame * 0.22)) * 3.4;
+  const coatLift = Math.sin(frame * 0.22 + 0.4) * 5;
+
+  const leg = (swing: number, far: boolean) => {
+    const hip = { x: 372, y: 610 };
+    const knee = { x: hip.x + swing * 28 + 8, y: 740 - Math.max(0, swing) * 14 };
+    const ankle = { x: hip.x + swing * 62 + 22, y: 870 - Math.max(0, swing) * 30 };
+    const toe = { x: ankle.x + 38, y: ankle.y + 26 - Math.max(0, swing) * 10 };
+    return (
+      <g opacity={far ? 0.85 : 1}>
+        <path
+          d={ribbon([hip, knee, ankle, toe], [58, 42, 30, 22])}
+          fill={far ? "#080A0E" : palette.pants}
+          stroke={INK}
+          strokeWidth={3.4}
+          strokeLinejoin="round"
+        />
+        <path
+          d={ribbon([ankle, { x: toe.x + 6, y: toe.y + 2 }], [34, 18])}
+          fill="#0B0E14"
+          stroke={INK}
+          strokeWidth={2.8}
+        />
+        <path
+          d={`M${ankle.x - 10} ${ankle.y + 6} C${ankle.x + 12} ${ankle.y} ${toe.x} ${toe.y - 4} ${toe.x + 6} ${toe.y + 2}`}
+          stroke={far ? "#2C3444" : rim}
+          strokeWidth={3.4}
+          strokeLinecap="round"
+          fill="none"
+          opacity={0.85}
+        />
+      </g>
+    );
+  };
+
+  const arm = (swing: number, far: boolean) => {
+    const shoulder = { x: 384, y: 356 };
+    const elbow = { x: 384 + swing * 34, y: 474 };
+    const wrist = { x: 400 + swing * 58, y: 584 };
+    return (
+      <g opacity={far ? 0.75 : 1}>
+        <path
+          d={ribbon([shoulder, elbow, wrist], [70, 52, 38])}
+          fill={`url(#${id}-coat)`}
+          stroke={INK}
+          strokeWidth={3.4}
+          strokeLinejoin="round"
+        />
+        <path
+          d={ribbon([wrist, { x: wrist.x + 18, y: wrist.y + 34 }], [34, 24])}
+          fill={`url(#${id}-skinSoft)`}
+          stroke={INK}
+          strokeWidth={2.6}
+        />
+        <path
+          d={ribbon([{ x: wrist.x + 4, y: wrist.y + 12 }, { x: wrist.x + 12, y: wrist.y + 40 }], [10, 4])}
+          fill={`url(#${id}-skinSoft)`}
+          stroke={INK}
+          strokeWidth={2}
+        />
+        <path
+          d={`M${wrist.x - 18} ${wrist.y} C${wrist.x - 4} ${wrist.y + 8} ${wrist.x + 12} ${wrist.y + 6} ${wrist.x + 22} ${wrist.y - 4}`}
+          stroke={far ? "#202635" : rim}
+          strokeWidth={3}
+          strokeLinecap="round"
+          fill="none"
+          opacity={0.8}
+        />
+      </g>
+    );
+  };
+
+  return (
+    <g transform={`translate(0 ${bob})`}>
+      <ellipse cx={392} cy={926} rx={176} ry={24} fill="#000000" opacity={0.5} />
+      {leg(-stride, true)}
+      {/* torso in profile */}
+      <path
+        d={`M322 296 C292 314 280 348 278 392 C276 430 280 478 286 522 C290 556 294 590 ${300 + coatLift} 620 C326 634 404 642 444 624 C458 604 462 566 464 522 C468 470 464 412 454 372 C444 334 420 306 388 296 Z`}
+        fill={`url(#${id}-coat)`}
+        stroke={INK}
+        strokeWidth={4}
+        strokeLinejoin="round"
+      />
+      {/* coat opening / collar folds */}
+      <path d="M386 316 C398 352 402 404 396 452 C392 490 388 522 386 556" stroke="#05070B" strokeWidth={2.6} fill="none" opacity={0.6} />
+      <path d="M330 300 C348 330 360 352 362 382" stroke={INK} strokeWidth={2.8} fill="none" opacity={0.7} />
+      <path d="M448 370 C456 404 460 452 456 500" stroke="#05070B" strokeWidth={2.2} fill="none" opacity={0.4} />
+      <path
+        d={`M330 300 C300 316 288 348 286 392 C284 430 286 478 292 522`}
+        stroke={`url(#${id}-rim)`}
+        strokeWidth={6}
+        strokeLinecap="round"
+        fill="none"
+      />
+      {outfit === "travel_backpack" ? (
+        <g>
+          <path d="M352 322 C412 330 444 372 448 440 C452 488 444 528 432 560" stroke="#7A5A2E" strokeWidth={30} strokeLinecap="round" fill="none" />
+          <path d="M352 322 C412 330 444 372 448 440" stroke="#FFB800" strokeWidth={3} strokeLinecap="round" fill="none" opacity={0.5} />
+          <path d="M406 388 C390 420 388 452 396 486" stroke="#3B2E19" strokeWidth={5} strokeLinecap="round" fill="none" opacity={0.7} />
+        </g>
+      ) : null}
+      {outfit === "tech_hoodie" ? (
+        <path d="M352 300 C400 302 430 328 442 366 C424 348 400 336 372 334 Z" fill={palette.coatLight} stroke={INK} strokeWidth={3} />
+      ) : null}
+      {/* head in profile */}
+      <g transform="rotate(-2 380 190) translate(380 180) scale(1.12) translate(-380 -180)">
+        {/* neck */}
+        <path
+          d="M326 220 L324 258 C324 274 338 282 360 282 C382 282 394 274 394 258 L392 220 Z"
+          fill={`url(#${id}-skin)`}
+          stroke={INK}
+          strokeWidth={3.2}
+        />
+        <path d="M326 234 C340 252 380 252 392 234 L392 258 C380 274 340 274 326 258 Z" fill="#7E4C30" opacity={0.35} />
+        {/* face */}
+        <path
+          d="M306 132 C316 106 342 94 370 98 C398 102 418 122 424 148 C430 154 436 164 438 174 C440 182 434 188 428 192 C434 198 432 206 422 210 C412 216 406 222 396 224 C382 240 358 242 340 232 C320 221 308 198 306 172 Z"
+          fill={`url(#${id}-skin)`}
+          stroke={INK}
+          strokeWidth={3.8}
+          strokeLinejoin="round"
+        />
+        <path d="M310 170 C318 158 330 156 340 162 C330 166 322 174 318 184 Z" fill="#8A5738" opacity={0.22} />
+        {/* ear */}
+        <path
+          d="M334 158 C322 158 318 176 324 190 C330 202 342 204 348 196 C342 184 338 170 334 158 Z"
+          fill={`url(#${id}-skinSoft)`}
+          stroke={INK}
+          strokeWidth={2.6}
+        />
+        <path d="M334 166 C329 170 329 180 334 186" stroke="#7A4A2E" strokeWidth={1.8} fill="none" opacity={0.7} />
+        {/* brow + eye */}
+        <path d="M366 146 C378 134 396 134 406 144" stroke="#12151C" strokeWidth={7.2} strokeLinecap="round" fill="none" />
+        <AlmondEye id={id} x={390} y={168} open={0.95} tilt={-3} />
+        {/* nose, lips, chin */}
+        <path d="M424 160 C432 168 436 178 434 186" stroke="#8A5738" strokeWidth={2.4} strokeLinecap="round" fill="none" opacity={0.5} />
+        <path d="M424 190 C432 194 430 202 420 204" stroke={INK} strokeWidth={2.6} strokeLinecap="round" fill="none" />
+        <path d="M400 212 C410 212 418 210 424 204" stroke="#5E3320" strokeWidth={3} strokeLinecap="round" fill="none" />
+        <path d="M402 220 C410 224 418 222 424 216" stroke="#8A4A38" strokeWidth={2} strokeLinecap="round" fill="none" opacity={0.65} />
+        <path d="M312 190 C326 216 352 228 386 226" stroke="#6B3F28" strokeWidth={8} strokeLinecap="round" fill="none" opacity={0.16} />
+        {/* windswept hair */}
+        <path
+          d="M412 138 C418 106 398 82 366 80 C324 78 294 102 288 142 C282 178 288 214 306 238 C298 204 302 170 318 148 C332 130 352 120 374 120 C392 120 406 128 412 140 Z"
+          fill={`url(#${id}-hair)`}
+          stroke={INK}
+          strokeWidth={3.2}
+          strokeLinejoin="round"
+        />
+        <path
+          d="M410 132 C404 146 408 158 420 166"
+          fill="none"
+          stroke={INK}
+          strokeWidth={3}
+          strokeLinecap="round"
+        />
+        <path d={ribbon([{ x: 386, y: 96 }, { x: 338, y: 104 }, { x: 300, y: 132 }, { x: 286, y: 178 }], [32, 25, 15, 3])} fill={`url(#${id}-hair)`} stroke={INK} strokeWidth={2.2} />
+        <path d={ribbon([{ x: 366, y: 108 }, { x: 328, y: 122 }, { x: 300, y: 154 }, { x: 290, y: 198 }], [22, 16, 9, 2])} fill="#1B2130" stroke={INK} strokeWidth={2} />
+        <path d={ribbon([{ x: 400, y: 110 }, { x: 366, y: 120 }, { x: 346, y: 144 }], [18, 10, 2])} fill="#101520" />
+        <path d="M410 136 C410 112 398 94 380 88" stroke={`url(#${id}-rim)`} strokeWidth={8} strokeLinecap="round" fill="none" />
+        <path d="M302 178 C298 160 302 140 314 126" stroke={rim} strokeWidth={2.4} strokeLinecap="round" fill="none" opacity={0.35} />
+      </g>
+      {arm(-stride, true)}
+      {leg(stride, false)}
+      {arm(stride, false)}
+    </g>
+  );
+};
+
+/** Tight close-up: fingers fastening a crisp white school shirt button. */
+const HandsCloseup: React.FC<{ id: string; palette: (typeof PALETTE)[AvatarOutfit]; frame: number; rim: string }> = ({
+  id,
+  palette,
+  frame,
+}) => {
+  const press = Math.sin(frame * 0.1) * 3;
+  const buttonY = 516;
+  return (
+    <g>
+      {/* ambient */}
+      <ellipse cx={210} cy={240} rx={420} ry={320} fill="#FFB800" opacity={0.1} />
+      <ellipse cx={560} cy={720} rx={380} ry={300} fill={palette.trim} opacity={0.1} />
+      {/* shirt chest */}
+      <path
+        d="M120 230 C210 196 510 196 600 230 L640 900 L80 900 Z"
+        fill={`url(#${id}-shirt)`}
+        stroke={INK}
+        strokeWidth={4}
+      />
+      {/* collar wings */}
+      <path d="M300 214 C326 262 344 300 356 336 L268 356 C282 302 290 256 300 214 Z" fill="#FFFFFF" stroke={INK} strokeWidth={3.4} strokeLinejoin="round" />
+      <path d="M420 214 C394 262 376 300 364 336 L452 356 C438 302 430 256 420 214 Z" fill={palette.shirt} stroke={INK} strokeWidth={3.4} strokeLinejoin="round" />
+      <path d="M300 220 C314 260 330 296 344 328 L320 336 C310 298 304 260 300 220 Z" fill={palette.shirtShade} opacity={0.55} />
+      <path d="M330 340 C344 350 356 352 366 344" stroke="#8E9AAE" strokeWidth={2.6} fill="none" strokeLinecap="round" />
+      {/* placket */}
+      <path d="M330 336 L390 336 L398 900 L322 900 Z" fill="#FFFFFF" opacity={0.55} />
+      <path d="M330 340 L330 900" stroke="#A7B4C6" strokeWidth={3} />
+      <path d="M390 340 L390 900" stroke="#A7B4C6" strokeWidth={3} />
+      <path d="M336 340 L336 900" stroke="#DCE4EF" strokeWidth={2} opacity={0.9} />
+      {/* chest folds */}
+      <path d="M170 300 C190 400 180 520 150 640" stroke="#B9C5D6" strokeWidth={3.4} fill="none" opacity={0.8} strokeLinecap="round" />
+      <path d="M540 300 C520 420 532 540 566 650" stroke="#B9C5D6" strokeWidth={3.4} fill="none" opacity={0.7} strokeLinecap="round" />
+      <path d="M210 560 C260 590 300 600 330 596" stroke="#C6D1DF" strokeWidth={2.6} fill="none" opacity={0.7} strokeLinecap="round" />
+      <path d="M520 620 C480 650 430 660 400 656" stroke="#C6D1DF" strokeWidth={2.6} fill="none" opacity={0.6} strokeLinecap="round" />
+      {/* buttons */}
+      {[600, 690, 780].map((y) => (
+        <g key={y}>
+          <circle cx={360} cy={y} r={15} fill="#E8EEF6" stroke="#8E9AAE" strokeWidth={2.6} />
+          <circle cx={354} cy={y - 4} r={2.6} fill="#7C8798" />
+          <circle cx={366} cy={y - 4} r={2.6} fill="#7C8798" />
+          <circle cx={354} cy={y + 5} r={2.6} fill="#7C8798" />
+          <circle cx={366} cy={y + 5} r={2.6} fill="#7C8798" />
+        </g>
+      ))}
+      {/* collar rim light */}
+      <path d="M420 214 C394 262 376 300 364 336" stroke={palette.trim} strokeWidth={4} strokeLinecap="round" fill="none" opacity={0.55} />
+
+      {/* left hand, holding the placket */}
+      <g transform={`translate(${16 + press * 0.3} ${-10 + press * 0.4})`}>
+        <path
+          d="M116 872 C158 838 196 780 220 728 C238 690 224 656 192 646 C160 636 132 660 124 696 C114 742 96 800 78 840 Z"
+          fill={`url(#${id}-skin)`}
+          stroke={INK}
+          strokeWidth={3.4}
+          strokeLinejoin="round"
+        />
+        <path d={ribbon([{ x: 192, y: 664 }, { x: 250, y: 640 }, { x: 306, y: 626 }], [32, 28, 22])} fill={`url(#${id}-skinSoft)`} stroke={INK} strokeWidth={3} strokeLinejoin="round" />
+        <path d={ribbon([{ x: 180, y: 700 }, { x: 238, y: 676 }, { x: 292, y: 662 }], [30, 25, 20])} fill={`url(#${id}-skin)`} stroke={INK} strokeWidth={3} strokeLinejoin="round" />
+        <path d={ribbon([{ x: 170, y: 736 }, { x: 222, y: 714 }, { x: 270, y: 702 }], [28, 22, 17])} fill={`url(#${id}-skinSoft)`} stroke={INK} strokeWidth={3} strokeLinejoin="round" />
+        <path d={ribbon([{ x: 162, y: 770 }, { x: 206, y: 752 }, { x: 246, y: 742 }], [24, 19, 14])} fill={`url(#${id}-skin)`} stroke={INK} strokeWidth={2.8} strokeLinejoin="round" />
+        <path d={ribbon([{ x: 170, y: 690 }, { x: 226, y: 672 }, { x: 280, y: 660 }], [38, 30, 20])} fill={`url(#${id}-skinSoft)`} stroke={INK} strokeWidth={3} strokeLinejoin="round" />
+        <circle cx={310} cy={624} r={9} fill={`url(#${id}-skinSoft)`} stroke={INK} strokeWidth={2.4} />
+        <circle cx={296} cy={660} r={8} fill={`url(#${id}-skin)`} stroke={INK} strokeWidth={2.4} />
+        <circle cx={274} cy={700} r={7.5} fill={`url(#${id}-skinSoft)`} stroke={INK} strokeWidth={2.4} />
+        <circle cx={250} cy={740} r={7} fill={`url(#${id}-skin)`} stroke={INK} strokeWidth={2.4} />
+        <circle cx={284} cy={658} r={8} fill={`url(#${id}-skinSoft)`} stroke={INK} strokeWidth={2.4} />
+        <path d="M196 684 C212 690 226 692 238 690" stroke="#7A4A2E" strokeWidth={2} fill="none" opacity={0.55} strokeLinecap="round" />
+        <path d="M186 720 C200 726 214 728 226 726" stroke="#7A4A2E" strokeWidth={2} fill="none" opacity={0.45} strokeLinecap="round" />
+        {/* cuff */}
+        <path d="M104 872 C146 850 196 852 232 872 L216 942 C176 928 136 928 96 940 Z" fill={palette.shirt} stroke={INK} strokeWidth={3.4} strokeLinejoin="round" />
+        <path d="M122 888 C158 874 194 876 218 888" stroke="#B9C5D6" strokeWidth={2.2} fill="none" />
+      </g>
+
+      {/* right hand, pinching the button */}
+      <g transform={`translate(${press - 22} -14)`}>
+        <path
+          d="M604 852 C560 820 520 760 492 706 C472 668 486 632 520 622 C552 612 580 636 588 672 C598 718 620 780 640 820 Z"
+          fill={`url(#${id}-skin)`}
+          stroke={INK}
+          strokeWidth={3.4}
+          strokeLinejoin="round"
+        />
+        <path d={ribbon([{ x: 520, y: 640 }, { x: 470, y: 590 }, { x: 420, y: 548 }, { x: 380, y: 522 }], [34, 30, 26, 20])} fill={`url(#${id}-skinSoft)`} stroke={INK} strokeWidth={3} strokeLinejoin="round" />
+        <path d={ribbon([{ x: 548, y: 690 }, { x: 480, y: 620 }, { x: 414, y: 556 }], [42, 34, 24])} fill={`url(#${id}-skin)`} stroke={INK} strokeWidth={3} strokeLinejoin="round" />
+        <path d={ribbon([{ x: 536, y: 676 }, { x: 492, y: 640 }, { x: 456, y: 628 }], [32, 26, 20])} fill={`url(#${id}-skinSoft)`} stroke={INK} strokeWidth={3} strokeLinejoin="round" />
+        <path d={ribbon([{ x: 548, y: 712 }, { x: 508, y: 682 }, { x: 478, y: 672 }], [30, 24, 18])} fill={`url(#${id}-skin)`} stroke={INK} strokeWidth={3} strokeLinejoin="round" />
+        <path d={ribbon([{ x: 560, y: 748 }, { x: 526, y: 724 }, { x: 500, y: 714 }], [26, 20, 15])} fill={`url(#${id}-skinSoft)`} stroke={INK} strokeWidth={2.8} strokeLinejoin="round" />
+        <circle cx={376} cy={518} r={10} fill={`url(#${id}-skinSoft)`} stroke={INK} strokeWidth={2.4} />
+        <circle cx={452} cy={626} r={8} fill={`url(#${id}-skinSoft)`} stroke={INK} strokeWidth={2.4} />
+        <circle cx={476} cy={670} r={7.5} fill={`url(#${id}-skin)`} stroke={INK} strokeWidth={2.4} />
+        <circle cx={498} cy={712} r={7} fill={`url(#${id}-skinSoft)`} stroke={INK} strokeWidth={2.4} />
+        <circle cx={410} cy={552} r={9} fill={`url(#${id}-skin)`} stroke={INK} strokeWidth={2.4} />
+        <path d="M510 660 C522 668 530 676 532 686" stroke="#7A4A2E" strokeWidth={2} fill="none" opacity={0.55} strokeLinecap="round" />
+        <path d="M520 700 C532 708 540 716 542 726" stroke="#7A4A2E" strokeWidth={2} fill="none" opacity={0.45} strokeLinecap="round" />
+        {/* cuff */}
+        <path d="M616 856 C574 834 524 836 488 856 L504 926 C544 912 584 912 624 924 Z" fill={palette.shirt} stroke={INK} strokeWidth={3.4} strokeLinejoin="round" />
+        <path d="M598 872 C562 858 526 860 502 872" stroke="#B9C5D6" strokeWidth={2.2} fill="none" />
+      </g>
+
+      {/* the button being fastened */}
+      <g transform={`translate(0 ${press})`}>
+        <circle cx={360} cy={buttonY} r={19} fill="#F7FAFE" stroke="#7C8798" strokeWidth={3} />
+        <circle cx={353} cy={buttonY - 5} r={3} fill="#6B7688" />
+        <circle cx={367} cy={buttonY - 5} r={3} fill="#6B7688" />
+        <circle cx={353} cy={buttonY + 6} r={3} fill="#6B7688" />
+        <circle cx={367} cy={buttonY + 6} r={3} fill="#6B7688" />
+        <path d="M345 396 C352 388 368 388 374 396" stroke={palette.trim} strokeWidth={2.6} fill="none" opacity={0.45} strokeLinecap="round" />
+      </g>
+      {/* buttonhole */ }
+      <path d={`M352 ${buttonY + 40} C360 ${buttonY + 36} 368 ${buttonY + 40} 368 ${buttonY + 46}`} stroke="#8E9AAE" strokeWidth={3} fill="none" strokeLinecap="round" />
+    </g>
+  );
+};
+
+export const ExplorerAvatar: React.FC<ExplorerAvatarProps> = ({
+  cameraAngle,
+  outfit = "school_uniform",
+  expression = "neutral",
+  rim = COLORS.cyan,
+  style,
+}) => {
+  const rawId = useId();
+  const id = rawId.replace(/[^a-zA-Z0-9_-]/g, "");
+  const palette = PALETTE[outfit];
+  const { frame, enter, breathe, headSway, bobY } = useMicroMotion();
+
+  if (cameraAngle === "hands_closeup") {
+    return (
+      <svg viewBox="0 0 720 900" style={{ width: "100%", height: "100%", overflow: "visible", ...style }} aria-hidden>
+        <Defs id={id} palette={palette} rim={rim} />
+        <HandsCloseup id={id} palette={palette} frame={frame} rim={rim} />
+      </svg>
+    );
+  }
+
+  const isFullBody = cameraAngle === "back_walk" || cameraAngle === "side_profile";
+  const viewBox = isFullBody ? "0 0 720 1000" : "0 0 720 760";
+
+  return (
+    <svg viewBox={viewBox} style={{ width: "100%", height: "100%", overflow: "visible", ...style }} aria-hidden>
+      <Defs id={id} palette={palette} rim={rim} />
+      <g transform={`translate(0 ${(1 - enter) * 16 + bobY * 0.3})`}>
+        {cameraAngle === "back_walk" ? (
+          <FullBodyBack id={id} palette={palette} outfit={outfit} frame={frame} rim={rim} />
+        ) : null}
+        {cameraAngle === "side_profile" ? (
+          <FullBodyProfile id={id} palette={palette} outfit={outfit} frame={frame} rim={rim} />
+        ) : null}
+        {!isFullBody ? (
+          <g transform={`translate(${cameraAngle === "chest_up_3_4" ? 10 : 0} ${breathe * 0.5}) rotate(${headSway} 360 300)`}>
+            <Face id={id} frame={frame} expression={expression} threeQuarter={cameraAngle === "chest_up_3_4"} />
+            <ChestBody id={id} palette={palette} outfit={outfit} rim={rim} />
+          </g>
+        ) : null}
       </g>
     </svg>
   );

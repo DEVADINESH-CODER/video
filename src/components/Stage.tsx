@@ -99,12 +99,7 @@ export const Chrome: React.FC = () => {
     SCENES.find(
       (scene) => frame >= scene.from && frame < scene.from + scene.duration,
     ) ?? SCENES[SCENES.length - 1];
-  const accent =
-    active.name === "The scoreboard"
-      ? COLORS.crimson
-      : active.name === "The reason"
-        ? COLORS.amber
-        : COLORS.cyan;
+  const accent = active.accent;
 
   return (
     <AbsoluteFill style={{ pointerEvents: "none" }}>
