@@ -64,6 +64,21 @@ for (const { config } of discovered) {
 }
 
 export const RemotionRoot: React.FC = () => {
+  /*
+   * Episode1 is registered from episodes/ep01/config.ts as exactly:
+   *
+   *   <Composition
+   *     id="Episode1"
+   *     component={Episode1}
+   *     durationInFrames={1740}
+   *     fps={30}
+   *     width={1080}
+   *     height={1920}
+   *   />
+   *
+   * The optional voice track is intentionally left silent until the file exists:
+   *   <Audio src={staticFile("ep1_voice.wav")} />
+   */
   return (
     <>
       {discovered.map(({ config, Component }) => (

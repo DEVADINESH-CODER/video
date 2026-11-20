@@ -1,23 +1,22 @@
-import { AbsoluteFill, Sequence } from "remotion";
-import { Chrome } from "../../src/components/Stage";
+import { AbsoluteFill, Sequence, useCurrentFrame } from "remotion";
+import { EditorialChrome } from "../../src/components/EditorialChrome";
 import { Voiceover } from "../../src/components/Voiceover";
-import { COLORS } from "../../src/theme";
+import { PAPER } from "../../src/sketch";
 import { EPISODE } from "./config";
-import { Scene1 } from "./scenes/Scene1";
-import { Scene2 } from "./scenes/Scene2";
-import { Scene3 } from "./scenes/Scene3";
-import { Scene4 } from "./scenes/Scene4";
-import { Scene5 } from "./scenes/Scene5";
-import { Scene6 } from "./scenes/Scene6";
-import { Scene7 } from "./scenes/Scene7";
+import { Scene1 } from "../../src/scenes/Scene1";
+import { Scene2 } from "../../src/scenes/Scene2";
+import { Scene3 } from "../../src/scenes/Scene3";
+import { Scene4 } from "../../src/scenes/Scene4";
+import { Scene5 } from "../../src/scenes/Scene5";
+import { Scene6 } from "../../src/scenes/Scene6";
+import { Scene7 } from "../../src/scenes/Scene7";
 
 /**
  * Episode 01 — "Worthless"
- * 1080 x 1920 · 30 fps · 1740 frames · 58 seconds.
+ * 1080 × 1920 · 30 fps · 1740 frames · 58 seconds.
  *
- * The character stays on screen through every chapter; only the world, the
- * light and what he is carrying changes. Scene windows come from config.ts, so
- * re-timing an episode never means editing this file.
+ * A continuous ink drawing. Every scene is a sheet of paper or charcoal; the
+ * character is never a puppet, only a set of strokes being finished.
  */
 
 const SCENE_COMPONENTS: React.FC[] = [
@@ -30,6 +29,8 @@ const SCENE_COMPONENTS: React.FC[] = [
   Scene7,
 ];
 
+const DARK_SCENES = new Set([3, 4, 5]);
+
 if (SCENE_COMPONENTS.length !== EPISODE.scenes.length) {
   throw new Error(
     `episodes/${EPISODE.slug}: config.ts has ${EPISODE.scenes.length} scenes but Episode1.tsx mounts ${SCENE_COMPONENTS.length}.`,
@@ -37,13 +38,22 @@ if (SCENE_COMPONENTS.length !== EPISODE.scenes.length) {
 }
 
 export const Episode1: React.FC = () => {
+  const frame = useCurrentFrame();
+  const active = Math.max(
+    0,
+    EPISODE.scenes.findIndex(
+      (scene) => frame >= scene.from && frame < scene.from + scene.duration,
+    ),
+  );
+  const tone = DARK_SCENES.has(active) ? "charcoal" : "paper";
+
   return (
-    <AbsoluteFill style={{ backgroundColor: COLORS.bgDeep }}>
+    <AbsoluteFill style={{ backgroundColor: PAPER }}>
       {/*
-       * Voiceover is optional: <Voiceover> plays public/audio/ep01_voice.wav
-       * when the file exists and stays silent when it does not, so a fresh
-       * clone still renders. To force a track, use the commented form:
-       * <Audio src={staticFile("audio/ep01_voice.wav")} />
+       * The voice track is optional. When public/ep1_voice.wav exists it plays;
+       * when it does not, the film stays silent and a fresh clone still renders.
+       * To force a track, use the commented form:
+       * <Audio src={staticFile("ep1_voice.wav")} />
        */}
       <Voiceover src={EPISODE.voiceover} />
 
@@ -61,10 +71,11 @@ export const Episode1: React.FC = () => {
         );
       })}
 
-      <Chrome
+      <EditorialChrome
         scenes={EPISODE.scenes}
         durationInFrames={EPISODE.durationInFrames}
         label={EPISODE.label}
+        tone={tone}
       />
     </AbsoluteFill>
   );

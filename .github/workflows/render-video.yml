@@ -98,7 +98,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p out/preview-stills
-          for frame in 60 220 480 710 840 1020 1240 1520; do
+          for frame in 80 240 500 720 850 1040 1260 1580; do
             npx remotion still "$COMPOSITION" "out/preview-stills/frame-$frame.png" --frame="$frame"
           done
 
@@ -110,9 +110,9 @@ jobs:
           set -euo pipefail
           mkdir -p out/preview-stills
           ffmpeg -hide_banner -loglevel error -y -i "out/$COMPOSITION.mp4" \
-            -vf "select='eq(n\,60)+eq(n\,220)+eq(n\,480)+eq(n\,710)+eq(n\,840)+eq(n\,1020)+eq(n\,1240)+eq(n\,1520)'" \
+            -vf "select='eq(n\,80)+eq(n\,240)+eq(n\,500)+eq(n\,720)+eq(n\,850)+eq(n\,1040)+eq(n\,1260)+eq(n\,1580)'" \
             -fps_mode vfr "out/preview-stills/extracted-%02d.png"
-          frames=(60 220 480 710 840 1020 1240 1520)
+          frames=(80 240 500 720 850 1040 1260 1580)
           i=1
           for frame in "${frames[@]}"; do
             mv "out/preview-stills/extracted-$(printf '%02d' "$i").png" "out/preview-stills/frame-$frame.png"
